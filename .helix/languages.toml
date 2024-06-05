@@ -1,0 +1,25 @@
+[[language]]
+name = "python"
+language-servers = [ "pyright", "ruff" ]
+
+[language-server.pyright]
+command = "poetry"
+args = ["run", "pyright-langserver", "--stdio"]
+
+[language-server.pyright.config]
+reportMissingTypeStubs = false
+
+[language-server.pyright.config.python.analysis]
+typeCheckingMode = "basic"
+autoImportCompletions = true
+
+[language-server.ruff]
+command = "poetry"
+args = ["run", "ruff-lsp"]
+
+[language-server.ruff.config.settings]
+args = ["--ignore", "E501"]
+
+[language.formatter]
+command = "poetry"
+args = ["run", "ruff", "format", "--line-length", "120", "--silent", "-"]
