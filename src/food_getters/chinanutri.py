@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import requests
 
 from ..nutrient import Nutrient
-from ..units import G, MCG, MG, KJ
+from ..units import G, KCAL, MCG, MG, KJ
 
 
 def chinanutri(id: int) -> Callable[[], Dict[Nutrient, float]]:
@@ -47,14 +47,7 @@ def chinanutri(id: int) -> Callable[[], Dict[Nutrient, float]]:
             unit = match.group(3)
             # print(nut, amount, unit)
 
-            if unit == "g":
-                amount *= G
-            elif unit == "mg":
-                amount *= MG
-            elif unit == "μg":
-                amount *= MCG
-            elif unit == "kJ":
-                amount *= KJ
+            amount = normalize(amount, unit)
 
             ret[nut] = amount / 100  # Food on this website is per 100g
 
@@ -62,6 +55,23 @@ def chinanutri(id: int) -> Callable[[], Dict[Nutrient, float]]:
 
     return inner
 
+def normalize(amount: float, unit: str) -> float:
+    if unit == "g":
+        amount *= G
+    elif unit == "mg":
+        amount *= MG
+    elif unit == "μg":
+        amount *= MCG
+    elif unit == "µg":
+        amount *= MCG
+    elif unit == "kJ":
+        amount *= KJ
+    elif unit == "kcal":
+        amount *= KCAL
+    else:
+        raise NotImplementedError(unit)
+
+    return amount
 
 NAME_TO_ENUM = {
     "能量(Energy)": Nutrient.ENERGY,

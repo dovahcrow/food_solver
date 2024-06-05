@@ -12,6 +12,7 @@ requests = "^2.32.3"
 beautifulsoup4= "^4"
 humanize = "^4.9.0"
 gurobipy = "^11.0.2"
+click = "^8.1.7"
 
 
 [tool.poetry.group.dev.dependencies]
