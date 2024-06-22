@@ -84,7 +84,7 @@ NAME_TO_ENUM = {
     "胡萝卜素(Carotene)": Nutrient.CAROTENE,
     "维生素A(Vitamin)": Nutrient.VITAMIN_A,
     "硫胺素(Thiamin)": Nutrient.VITAMIN_B1,
-    "核黄素(Riboflavin)": Nutrient.RIBOFLAVIN,
+    "核黄素(Riboflavin)": Nutrient.VITAMIN_B2,
     "烟酸(Niacin)": Nutrient.NIACIN,
     "维生素C(Vitamin C)": Nutrient.VITAMIN_C,
     "钙(Ca)": Nutrient.CALCIUM,

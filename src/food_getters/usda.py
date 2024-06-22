@@ -87,7 +87,7 @@ NAME_TO_ENUM = {
     "Iodine, I": Nutrient.IODINE,
     "Selenium, Se": Nutrient.SELENIUM,
     "Thiamin": Nutrient.VITAMIN_B1,
-    "Riboflavin": Nutrient.RIBOFLAVIN,
+    "Riboflavin": Nutrient.VITAMIN_B2,
     "Niacin": Nutrient.NIACIN,
     "Vitamin B-6": Nutrient.VITAMIN_B6,
     "Folate, total": Nutrient.FOLIC_ACID,

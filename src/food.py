@@ -11,44 +11,52 @@ from .nutrient import Nutrient, Nutrients
 
 @unique
 class Food(Enum):
+    BALANCEIT = auto()
+    BANANA = auto()
+    BARF = auto()
+    BEEF = auto()
     BROCCOLI = auto()
     CANOLA_OIL = auto()
     CARROT = auto()
+    CELERY = auto()
     CHICKEN_BREAST = auto()
+    CHINESE_LETTUS = auto()
+    CUCUMBER = auto()
+    EGG = auto()
     PORK_LIVER = auto()
     SALT = auto()
-    SWEET_POTATO = auto()
     SOYBEAN = auto()
-    CHINESE_LETTUS = auto()
-    BANANA = auto()
-    EGG = auto()
     SOY_MILK = auto()
-    CELERY = auto()
-    BARF = auto()
-    BALANCEIT = auto()
+    SWEET_POTATO = auto()
 
 
 GETTERS = {
-    # Food.BROCCOLI: chinanutri(465),
-    Food.BROCCOLI: usda(747447),
-    Food.CANOLA_OIL: chinanutri(1495),
-    # Food.CARROT: chinanutri(380),
-    Food.CARROT: usda(2258586),
-    # Food.CHICKEN_BREAST: chinanutri(880),
-    # Food.CHICKEN_BREAST: usda(2646170),
-    Food.CHICKEN_BREAST: convert_cooked_chicken_breast_to_uncoocked(usda(331960)),
-    Food.PORK_LIVER: chinanutri(797),
-    Food.SALT: chinanutri(1565),
-    # Food.SWEET_POTATO: chinanutri(316),
-    Food.SWEET_POTATO: usda(2346404),
-    Food.SOYBEAN: chinanutri(326),
-    Food.CHINESE_LETTUS: chinanutri(482),
+    Food.BALANCEIT: {
+        Nutrient.CALCIUM: 3.036 * G / 20,
+        Nutrient.PHOSPHORUS: 1.596 * G / 20,
+        Nutrient.POTASSIUM: 2.0184 * G / 20,
+        Nutrient.SODIUM: 0.208 * G / 20,
+        Nutrient.CHLORIDE: 0.3504 * G / 20,
+        Nutrient.MAGNESIUM: 0.16 * G / 20,
+        Nutrient.IRON: 32.92 * MG / 20,
+        Nutrient.COPPER: 3.0264 * MG / 20,
+        Nutrient.MANGANESE: 2.264 * MG / 20,
+        Nutrient.ZINC: 53 * MG / 20,
+        Nutrient.IODINE: 0.6864 * MG / 20,
+        Nutrient.SELENIUM: 0.072 * MG / 20,
+        Nutrient.VITAMIN_A: 2268 * 0.3 * MCG / 20,
+        Nutrient.VITAMIN_D: 220 * 0.025 * MCG / 20,
+        Nutrient.VITAMIN_E: 89.6 * 0.67 * MG / 20,
+        Nutrient.VITAMIN_B1: 0.6424 * MG / 20,
+        Nutrient.VITAMIN_B2: 1.82 * MG / 20,
+        Nutrient.VITAMIN_B5: 3.472 * MG / 20,
+        Nutrient.NIACIN: 4.8064 * MG / 20,
+        Nutrient.FOLIC_ACID: 0.12 * MG / 20,
+        Nutrient.VITAMIN_B12: 0.0114 * MG / 20,
+        Nutrient.CHOLINE: 490.18 * MG / 20,
+    },
     # Food.BANANA: chinanutri(726),
     Food.BANANA: usda(1105314),
-    # Food.EGG: chinanutri(978),
-    Food.EGG: usda(748967),
-    Food.SOY_MILK: usda(1999630),
-    Food.CELERY: usda(2346405),
     Food.BARF: {
         Nutrient.ASH: 182 * G / KG,
         Nutrient.FIBER: 70 * G / KG,
@@ -77,30 +85,26 @@ GETTERS = {
         Nutrient.MANGANESE: 45.6 * MG / KG,
         Nutrient.IODINE: 28.4 * MG / KG,
     },
-    Food.BALANCEIT: {
-        Nutrient.CALCIUM: 3.036 * G / 20,
-        Nutrient.PHOSPHORUS: 1.596 * G / 20,
-        Nutrient.POTASSIUM: 2.0184 * G / 20,
-        Nutrient.SODIUM: 0.208 * G / 20,
-        Nutrient.CHLORIDE: 0.3504 * G / 20,
-        Nutrient.MAGNESIUM: 0.16 * G / 20,
-        Nutrient.IRON: 32.92 * MG / 20,
-        Nutrient.COPPER: 3.0264 * MG / 20,
-        Nutrient.MANGANESE: 2.264 * MG / 20,
-        Nutrient.ZINC: 53 * MG / 20,
-        Nutrient.IODINE: 0.6864 * MG / 20,
-        Nutrient.SELENIUM: 0.072 * MG / 20,
-        Nutrient.VITAMIN_A: 2268 * 0.3 * MCG / 20,
-        Nutrient.VITAMIN_D: 220 * 0.025 * MCG / 20,
-        Nutrient.VITAMIN_E: 89.6 * 0.67 * MG / 20,
-        Nutrient.VITAMIN_B1: 0.6424 * MG / 20,
-        Nutrient.RIBOFLAVIN: 1.82 * MG / 20,
-        Nutrient.VITAMIN_B5: 3.472 * MG / 20,
-        Nutrient.NIACIN: 4.8064 * MG / 20,
-        Nutrient.FOLIC_ACID: 0.12 * MG / 20,
-        Nutrient.VITAMIN_B12: 0.0114 * MG / 20,
-        Nutrient.CHOLINE: 490.18 * MG / 20,
-    },
+    # Food.BROCCOLI: chinanutri(465),
+    Food.BROCCOLI: usda(747447),
+    Food.BEEF: usda(2646173),
+    Food.CANOLA_OIL: chinanutri(1495),
+    # Food.CARROT: chinanutri(380),
+    Food.CARROT: usda(2258586),
+    Food.CELERY: usda(2346405),
+    # Food.CHICKEN_BREAST: chinanutri(880),
+    # Food.CHICKEN_BREAST: usda(2646170),
+    Food.CHICKEN_BREAST: convert_cooked_chicken_breast_to_uncoocked(usda(331960)),
+    Food.CHINESE_LETTUS: chinanutri(482),
+    Food.CUCUMBER: usda(2346406),
+    # Food.EGG: chinanutri(978),
+    Food.EGG: usda(748967),
+    Food.PORK_LIVER: chinanutri(797),
+    Food.SALT: chinanutri(1565),
+    # Food.SWEET_POTATO: chinanutri(316),
+    Food.SWEET_POTATO: usda(2346404),
+    Food.SOYBEAN: chinanutri(326),
+    Food.SOY_MILK: usda(1999630),
 }
 
 
