@@ -53,12 +53,9 @@ class RecipeSolver:
 
     def solve(self) -> int:
         self.food_names = foods = list(self.food_limits.keys())
-        num_hard = sum(
-            softness == NeedSoftness.HARD for _, _, _, softness in self.needs.values()
-        )
 
-        G = np.zeros((len(foods) * 2 + 2 * num_hard, len(foods)))
-        h = np.zeros(len(foods) * 2 + 2 * num_hard)
+        G = np.zeros((len(foods) * 2, len(foods)))
+        h = np.zeros(len(foods) * 2)
 
         for i, food in enumerate(foods):
             lb, ub = self.food_limits[food]
@@ -71,7 +68,6 @@ class RecipeSolver:
         P = np.zeros((len(foods), len(foods)))
         q = np.zeros((1, len(foods)))
 
-        j = 2 * len(foods)
         for need, (lb, ub, required, hard) in self.needs.items():
             # if isinstance(self.provides[n], int) and self.provides[n] == 0:
             #     logging.info(f"WARN: Food lacks {n}")
@@ -82,13 +78,11 @@ class RecipeSolver:
             has = np.asarray([self.food_nutrients[food].get(need, 0) for food in foods])
 
             if hard == NeedSoftness.HARD:
-                G[j, :] = -has
-                h[j] = -lb
-                j += 1
+                G = np.vstack([G, -has])
+                h = np.append(h, -lb)
                 if ub is not None:
-                    G[j, :] = has
-                    h[j] = ub
-                    j += 1
+                    G = np.vstack([G, has])
+                    h = np.append(h, ub)
             else:
                 if ub is None:
                     mid = lb * 1.05
@@ -123,7 +117,9 @@ class RecipeSolver:
 
     def print_nutrition(
         self,
-        needs: Dict[Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]],
+        needs: Dict[
+            Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]
+        ],
         detail: bool = False,
     ):
         print("Nutrition:")
