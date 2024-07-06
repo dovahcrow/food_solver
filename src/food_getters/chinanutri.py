@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Callable
-from typing import Dict
+from typing import Dict, Tuple
 
 from bs4 import BeautifulSoup
 import requests
@@ -11,12 +11,13 @@ from ..nutrient import Nutrient
 from ..units import G, KCAL, MCG, MG, KJ
 
 
-def chinanutri(id: int) -> Callable[[], Dict[Nutrient, float]]:
-    def inner() -> Dict[Nutrient, float]:
+def chinanutri(id: int) -> Callable[[], Tuple[str, Dict[Nutrient, float]]]:
+    def inner() -> Tuple[str, Dict[Nutrient, float]]:
         ret = {}
 
         resp = requests.get(f"https://nlc.chinanutri.cn/fq/foodinfo/{id}.html")
         soup = BeautifulSoup(resp.text, "html.parser")
+        food_name = soup.select("div.food_introduce_top>h1")[0].text
 
         rows = soup.select("div.nutrition_table_content tr")
         for row in rows[1:]:
@@ -51,9 +52,10 @@ def chinanutri(id: int) -> Callable[[], Dict[Nutrient, float]]:
 
             ret[nut] = amount / 100  # Food on this website is per 100g
 
-        return ret
+        return food_name, ret
 
     return inner
+
 
 def normalize(amount: float, unit: str) -> float:
     if unit == "g":
@@ -72,6 +74,7 @@ def normalize(amount: float, unit: str) -> float:
         raise NotImplementedError(unit)
 
     return amount
+
 
 NAME_TO_ENUM = {
     "能量(Energy)": Nutrient.ENERGY,

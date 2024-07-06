@@ -14,6 +14,7 @@ class Food(Enum):
     BALANCEIT = auto()
     BANANA = auto()
     BARF = auto()
+    BAICAI = auto()
     BEEF = auto()
     BROCCOLI = auto()
     CANOLA_OIL = auto()
@@ -23,9 +24,14 @@ class Food(Enum):
     CHINESE_LETTUS = auto()
     CUCUMBER = auto()
     EGG = auto()
+    OYSTER = auto()
     PORK_LIVER = auto()
+    PORK_HEART = auto()
+    PORK_TONGUE = auto()
+    POTATO = auto()
     SALT = auto()
-    SOYBEAN = auto()
+    SOYBEAN_GREEN = auto()
+    SOYBEAN_YELLOW = auto()
     SOY_MILK = auto()
     SWEET_POTATO = auto()
 
@@ -55,6 +61,7 @@ GETTERS = {
         Nutrient.VITAMIN_B12: 0.0114 * MG / 20,
         Nutrient.CHOLINE: 490.18 * MG / 20,
     },
+    Food.BAICAI: chinanutri(450),
     # Food.BANANA: chinanutri(726),
     Food.BANANA: usda(1105314),
     Food.BARF: {
@@ -99,11 +106,16 @@ GETTERS = {
     Food.CUCUMBER: usda(2346406),
     # Food.EGG: chinanutri(978),
     Food.EGG: usda(748967),
+    Food.OYSTER: chinanutri(1112),
     Food.PORK_LIVER: chinanutri(797),
+    Food.PORK_HEART: chinanutri(802),
+    Food.PORK_TONGUE: chinanutri(799),
+    Food.POTATO: usda(2346403),
     Food.SALT: chinanutri(1565),
     # Food.SWEET_POTATO: chinanutri(316),
     Food.SWEET_POTATO: usda(2346404),
-    Food.SOYBEAN: chinanutri(326),
+    Food.SOYBEAN_GREEN: chinanutri(391),
+    Food.SOYBEAN_YELLOW: chinanutri(326),
     Food.SOY_MILK: usda(1999630),
 }
 
@@ -122,15 +134,21 @@ def get_or_load(food: Food) -> Nutrients:
     try:
         with open(f"foods/{food.name}.json") as f:
             serde = load(f)
-            nuts = {Nutrient[k]: v for k, v in serde.items()}
+            nuts = {Nutrient[k]: v for k, v in serde.items() if k != "__name__"}
             return nuts
     except FileNotFoundError:
         pass
 
     print(f"Getting nutrients for {food.name}")
-    nuts = getter()
+    name, nuts = getter()
 
     with open(f"foods/{food.name}.json", "w+") as f:
-        dump({k.name: v for k, v in nuts.items()}, f, indent=4, sort_keys=True)
+        dump(
+            {"__name__": name, **{k.name: v for k, v in nuts.items()}},
+            f,
+            indent=4,
+            sort_keys=True,
+            ensure_ascii=False,
+        )
 
     return nuts

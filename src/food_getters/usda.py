@@ -1,7 +1,7 @@
 # FROM https://fdc.nal.usda.gov/index.html
 
 from collections.abc import Callable
-from typing import Dict
+from typing import Dict, Tuple
 
 import requests
 
@@ -10,12 +10,13 @@ from ..nutrient import Nutrient
 from ..units import VITAMIN_D_IU
 
 
-def usda(id: int) -> Callable[[], Dict[Nutrient, float]]:
-    def inner() -> Dict[Nutrient, float]:
+def usda(id: int) -> Callable[[], Tuple[str, Dict[Nutrient, float]]]:
+    def inner() -> Tuple[str, Dict[Nutrient, float]]:
         ret = {}
 
         resp = requests.get(f"https://fdc.nal.usda.gov/portal-data/external/{id}")
         data = resp.json()
+        food_name = data["description"]
 
         for nut in data["foodNutrients"]:
             if "value" not in nut:
@@ -27,7 +28,11 @@ def usda(id: int) -> Callable[[], Dict[Nutrient, float]]:
 
             # print(name, value, f"'{(unit)}'")
 
-            if name.startswith("MUFA") or name.startswith("SFA") or name.startswith("PUFA"):
+            if (
+                name.startswith("MUFA")
+                or name.startswith("SFA")
+                or name.startswith("PUFA")
+            ):
                 continue
 
             try:
@@ -46,17 +51,21 @@ def usda(id: int) -> Callable[[], Dict[Nutrient, float]]:
 
             ret[nut] = value / 100  # Food on this website is per 100g
 
-        return ret
+        return food_name, ret
 
     return inner
 
-def convert_cooked_chicken_breast_to_uncoocked(f: Callable[[], Dict[Nutrient, float]]) -> Callable[[], Dict[Nutrient, float]]:
+
+def convert_cooked_chicken_breast_to_uncoocked(
+    f: Callable[[], Tuple[str, Dict[Nutrient, float]]],
+) -> Callable[[], Tuple[str, Dict[Nutrient, float]]]:
     def inner():
-        ret = f()
+        name, ret = f()
         # Dirty fix for chicken breast. We use cooked chicken breast because some nutrients of raw checken breast are missing.
-        return {k: v / 1.49 for k, v in ret.items()}
+        return name, {k: v / 1.49 for k, v in ret.items()}
 
     return inner
+
 
 NAME_TO_ENUM = {
     "Water": None,

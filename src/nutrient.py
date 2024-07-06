@@ -30,11 +30,11 @@ class Nutrient(Enum):
     VITAMIN_D = 43
     VITAMIN_E = 44
     VITAMIN_K = 45
-    VITAMIN_B1 = 46 # Thiamin
-    VITAMIN_B2 = 47 # Riboflavin
-    VITAMIN_B5 = 48 # Pantothenic acid
+    VITAMIN_B1 = 46  # Thiamin
+    VITAMIN_B2 = 47  # Riboflavin
+    VITAMIN_B5 = 48  # Pantothenic acid
     VITAMIN_B6 = 49
-    VITAMIN_B7 = 50 # Biotin, Vitamin H
+    VITAMIN_B7 = 50  # Biotin, Vitamin H
     VITAMIN_B12 = 51
 
     NIACIN = 61
@@ -42,5 +42,6 @@ class Nutrient(Enum):
     FOLIC_ACID = 63
     CHOLINE = 64
     CAROTENE = 65
+
 
 Nutrients = Dict[Nutrient, float]

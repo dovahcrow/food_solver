@@ -1,105 +1,155 @@
-from collections import defaultdict
-from typing import DefaultDict, Dict, List, Optional, Tuple, cast
-import logging
-
-import gurobipy as gp
+from enum import Enum, auto
+from typing import Dict, List, Optional, Tuple
+import numpy as np
+import cvxopt
 
 from .units import MCG, MG, G
 from .food import Food, get_or_load
-from .nutrient import Nutrient
+from .nutrient import Nutrient, Nutrients
+
+# https://cvxopt.org/userguide/coneprog.html#quadratic-programming
+
+
+class NeedSoftness(Enum):
+    SOFT = auto()
+    HARD = auto()
+
+
+class NeedRequired(Enum):
+    REQUIRED = auto()
+    NOT_REQUIRED = auto()
 
 
 class RecipeSolver:
-    m: gp.Model
-    nutrients: Dict[Food, Dict[Nutrient, float]]
-    variables: Dict[Food, gp.Var]
-    provides: DefaultDict[Nutrient, gp.LinExpr | int]
-    constraints: List[gp.LinExpr]
+    food_limits: Dict[Food, Tuple[float, float]]
+    food_nutrients: Dict[Food, Nutrients]
+    food_names: List[Food]
+    needs: Dict[Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]]
 
     def __init__(self) -> None:
-        self.m = gp.Model("Recipe")
-        self.nutrients = {}
-        self.variables = {}
-        self.provides = defaultdict(int)
-        self.constraints = []
+        self.food_limits = {}
+        self.food_nutrients = {}
+        self.needs = {}
+        self.food_names = []
 
     def add_food(self, *foods: Tuple[Food, float, float]):
         for f, lb, ub in foods:
-            if f not in self.nutrients:
-                self.nutrients[f] = get_or_load(f)
+            if f not in self.food_nutrients:
+                self.food_nutrients[f] = get_or_load(f)
+                self.food_limits[f] = (lb, ub)
 
-            if f not in self.variables:
-                self.variables[f] = self.m.addVar(name=f.name, lb=lb, ub=ub)
+    def add_need(
+        self,
+        nut: Nutrient,
+        lb: float,
+        ub: Optional[float],
+        required: NeedRequired,
+        hard: NeedSoftness,
+    ):
+        if nut in self.needs:
+            return
 
-        for n in Nutrient:
-            for f, *_ in foods:
-                self.provides[n] += self.variables[f] * self.nutrients[f].get(n, 0)
-
-    def finalize(self, needs: Dict[Nutrient, Tuple[float, Optional[float]]]):
-        for n in Nutrient:
-            if n not in needs:
-                continue
-
-            if isinstance(self.provides[n], int) and self.provides[n] == 0:
-                logging.info(f"WARN: Food lacks {n}")
-                continue
-
-            lb = needs[n][0]
-            ub = needs[n][1]
-            k1 = 10 # Slope for nutrient out of range
-            k2 = 0.001 # Slope for nutrient in the range but away from the optimal point
-            if ub is not None:
-                rg = [lb - 1, lb, (lb + ub) / 2, ub, ub + 1], [k1, 0, - k2 * (ub - lb) / 2, 0, 10]
-            else:
-                rg = [lb - 1, lb, lb + 1], [k1, 0, -k2]
-
-            z = self.m.addVar(lb=0, name=n.name)
-            self.m.addConstr(z == self.provides[n])
-            self.m.setPWLObj(z, rg[0], rg[1])
-
-        for c in self.constraints:
-            self.m.addConstr(cast(gp.TempLConstr, c))
-
-        self.m.write("problem.lp")
+        self.needs[nut] = (lb, ub, required, hard)
 
     def solve(self) -> int:
-        self.m.optimize()
-        logging.info(f"Objective: {self.m.ObjVal}")
-        return self.m.Status
+        self.food_names = foods = list(self.food_limits.keys())
+        num_hard = sum(
+            softness == NeedSoftness.HARD for _, _, _, softness in self.needs.values()
+        )
+
+        G = np.zeros((len(foods) * 2 + 2 * num_hard, len(foods)))
+        h = np.zeros(len(foods) * 2 + 2 * num_hard)
+
+        for i, food in enumerate(foods):
+            lb, ub = self.food_limits[food]
+            G[i, i] = -1
+            h[i] = -lb
+
+            G[i + len(foods), i] = 1
+            h[i + len(foods)] = ub
+
+        P = np.zeros((len(foods), len(foods)))
+        q = np.zeros((1, len(foods)))
+
+        j = 2 * len(foods)
+        for need, (lb, ub, required, hard) in self.needs.items():
+            # if isinstance(self.provides[n], int) and self.provides[n] == 0:
+            #     logging.info(f"WARN: Food lacks {n}")
+            #     continue
+            if required != NeedRequired.REQUIRED:
+                continue
+
+            has = np.asarray([self.food_nutrients[food].get(need, 0) for food in foods])
+
+            if hard == NeedSoftness.HARD:
+                G[j, :] = -has
+                h[j] = -lb
+                j += 1
+                if ub is not None:
+                    G[j, :] = has
+                    h[j] = ub
+                    j += 1
+            else:
+                if ub is None:
+                    mid = lb * 1.05
+                else:
+                    mid = (lb + ub) / 2
+
+                has = has[None, :]
+                P += has.T @ has
+                q += has * -mid
+
+        G = cvxopt.matrix(G)
+        h = cvxopt.matrix(h)
+        P = cvxopt.matrix(P.T)
+        q = cvxopt.matrix(q.T)
+
+        self.sol = cvxopt.solvers.qp(P, q, G, h, options={"show_progress": False})
+
+        return self.sol["status"] == "optimal"
 
     def print_foods(self, day: float = 1):
-        logging.info("Solution:")
+        print("Solution:")
 
-        for k, v in self.variables.items():
-            logging.info(f"  {k.name} = {v.X * day:.2f}")
+        for i, f in enumerate(self.food_names):
+            amount = float(f"{self.amount(i) * day:.2g}")
+            print(f"  {f} = {amount:.1f}")
 
-    def print_nutrition(self, needs: Dict[Nutrient, Tuple[float, Optional[float]]], detail: bool = False):
-        logging.info("Nutrition:")
+    def amount(self, food: Food | int):
+        if isinstance(food, Food):
+            food = self.food_names.index(food)
+
+        return self.sol["x"][food]
+
+    def print_nutrition(
+        self,
+        needs: Dict[Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]],
+        detail: bool = False,
+    ):
+        print("Nutrition:")
         for n in Nutrient:
             if n not in needs:
                 continue
+
+            lb, ub, required, _ = needs[n]
+            ub = ub or float("+INF")
 
             value = 0
             comp = []
-            for f, v in self.variables.items():
-                nut = self.nutrients[f].get(n, 0)
+            for i, f in enumerate(self.food_names):
+                nut = self.food_nutrients[f].get(n, 0)
                 if nut != 0:
-                    comp.append((f, v.X * nut))
-                value += v.X * nut
-
-            lb = needs[n][0]
-            ub = needs[n][1] or float("+INF")
-
-            valid = lb <= value <= ub
+                    comp.append((f, self.amount(i) * nut))
+                value += self.amount(i) * nut
 
             if n == Nutrient.ENERGY:
                 scale = 1000
                 unit = "kJ"
             else:
-                if value >= G:
+                if lb >= G:
                     scale = G
                     unit = "g"
-                elif value >= MG:
+                elif lb >= MG:
                     scale = MG
                     unit = "mg"
                 else:
@@ -110,17 +160,45 @@ class RecipeSolver:
             lb /= scale
             ub /= scale
 
+            valid = lb <= value <= ub
+
             if detail:
-                comp_str = " = " + " + ".join([f"{f.name} {v / scale:g} {unit}" for f, v in comp])
+                comp_str = " = " + " + ".join(
+                    [f"{f.name} {v / scale:g} {unit}" for f, v in comp if v != 0]
+                )
             else:
                 comp_str = ""
 
             if len(comp) != 1 or not detail:
                 comp_str += f" = {value:g} {unit}"
 
-            if valid:
-                violate_str = ""
+            color = ""
+            if required != NeedRequired.REQUIRED:
+                if not valid:
+                    color = BColors.LIGHT_YELLOW
+                else:
+                    color = BColors.GRAY
+            elif not valid:
+                color = BColors.RED
             else:
-                violate_str = " [VIOLATE]"
-                
-            logging.info(f"  {n}{comp_str}, valid: {lb:.2f} ~ {ub:.2f} {unit}{violate_str}")
+                color = BColors.LIGHT_GREEN
+
+            print(
+                f"{color}  {n}{comp_str}, valid: {lb:.2f} ~ {ub:.2f} {unit}{BColors.ENDC}"
+            )
+
+
+class BColors:
+    HEADER = "\033[95m"
+    RED = "\033[31m"
+    YELLOW = "\033[33m"
+    GRAY = "\033[37m"
+    OKBLUE = "\033[94m"
+    OKCYAN = "\033[96m"
+    GREEN = "\033[32m"
+    LIGHT_GREEN = "\033[92m"
+    LIGHT_YELLOW = "\033[93m"
+    LIGHT_RED = "\033[91m"
+    ENDC = "\033[0m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"

@@ -14,10 +14,11 @@
     "PHOSPHORUS": 0.0004,
     "POTASSIUM": 0.0028000000000000004,
     "PROTEIN": 0.009399999999999999,
-    "VITAMIN_B2": 9.5e-07,
     "SELENIUM": 0.0,
     "SODIUM": 0.0008700000000000001,
     "VITAMIN_B1": 6.500000000000001e-07,
+    "VITAMIN_B2": 9.5e-07,
     "VITAMIN_B6": 1.46e-06,
-    "ZINC": 2.4e-06
+    "ZINC": 2.4e-06,
+    "__name__": "Carrots, mature, raw"
 }

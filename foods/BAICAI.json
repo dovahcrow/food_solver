@@ -1,0 +1,22 @@
+{
+    "ASH": 0.006,
+    "CALCIUM": 0.0005,
+    "CARB": 0.032,
+    "CAROTENE": 1.2e-06,
+    "COPPER": 5e-07,
+    "ENERGY": 840.0,
+    "FAT": 0.001,
+    "IRON": 7e-06,
+    "MAGNESIUM": 0.00010999999999999999,
+    "MANGANESE": 1.4999999999999998e-06,
+    "NIACIN": 5.999999999999999e-06,
+    "PHOSPHORUS": 0.00031,
+    "PROTEIN": 0.015,
+    "SELENIUM": 5e-09,
+    "SODIUM": 0.000575,
+    "VITAMIN_B1": 4.0000000000000003e-07,
+    "VITAMIN_B2": 5e-07,
+    "VITAMIN_C": 0.00031,
+    "ZINC": 3.8e-06,
+    "__name__": "大白菜(均值)"
+}
