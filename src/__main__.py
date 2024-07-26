@@ -23,29 +23,36 @@ def main():
 @click.option("--detail", required=False, type=bool, default=False)
 def opt(day: int, detail: bool):
     foods = [
-        (Food.BAICAI, 0, 190),
-        (Food.BROCCOLI, 0, 90),
-        # (Food.CARROT, 0, 50),
+        # (Food.BAICAI, 0, 190),
+        # (Food.BROCCOLI, 0, 90),
+        (Food.BELL_PEPER, 0, 90),
+        (Food.CABBAGE, 0, 90),
+        (Food.CARROT, 0, 50),
         # (Food.CELERY, 0, 50),
         # (Food.CHINESE_LETTUS, 0, 50),
         # (Food.CUCUMBER, 0, 50),
+        (Food.PORK_FAT, 0, 50),
         #
-        (Food.SOYBEAN_GREEN, 0, 80),
-        (Food.SWEET_POTATO, 0, 190),
+        # (Food.SOYBEAN_GREEN, 0, 80),
+        # (Food.SWEET_POTATO, 0, 190),
+        (Food.PUMPKIN, 0, 50),
         (Food.POTATO, 0, 190),
         # (Food.BANANA, 0, 50),
         #
-        (Food.PORK_HEART, 0, 75),
+        # (Food.PORK_HEART, 0, 75),
         (Food.EGG, 0, 50),
         # (Food.OYSTER, 0, 50),
         # (Food.PORK_TONGUE, 0, 50),
         # (Food.BEEF, 0, 50),
         # (Food.CHICKEN_BREAST, 0, 50),
-        # (Food.PORK_LIVER, 0, 50),
+        (Food.PORK_INTESTINE, 0, 50),
+        (Food.PORK, 0, 50),
+        (Food.PORK_LIVER, 0, 80),
         #
         (Food.CANOLA_OIL, 0, 10),
         (Food.SALT, 0, 2),
-        (Food.BARF, 0, 4),
+        (Food.EGG_SHELL_POWDER, 0, 2),
+        # (Food.BARF, 0, 4),
     ]
     needs = dog(age=2, weight=7, active=False)
 

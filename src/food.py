@@ -16,7 +16,9 @@ class Food(Enum):
     BARF = auto()
     BAICAI = auto()
     BEEF = auto()
+    BELL_PEPER = auto()
     BROCCOLI = auto()
+    CABBAGE = auto()
     CANOLA_OIL = auto()
     CARROT = auto()
     CELERY = auto()
@@ -24,10 +26,15 @@ class Food(Enum):
     CHINESE_LETTUS = auto()
     CUCUMBER = auto()
     EGG = auto()
+    EGG_SHELL_POWDER = auto()
     OYSTER = auto()
+    PUMPKIN = auto()
+    PORK = auto()
+    PORK_INTESTINE = auto()
     PORK_LIVER = auto()
     PORK_HEART = auto()
     PORK_TONGUE = auto()
+    PORK_FAT = auto()
     POTATO = auto()
     SALT = auto()
     SOYBEAN_GREEN = auto()
@@ -95,7 +102,9 @@ GETTERS = {
     # Food.BROCCOLI: chinanutri(465),
     Food.BROCCOLI: usda(747447),
     Food.BEEF: usda(2646173),
+    Food.BELL_PEPER: usda(2258590),
     Food.CANOLA_OIL: chinanutri(1495),
+    Food.CABBAGE: usda(2346407),
     # Food.CARROT: chinanutri(380),
     Food.CARROT: usda(2258586),
     Food.CELERY: usda(2346405),
@@ -105,8 +114,16 @@ GETTERS = {
     Food.CHINESE_LETTUS: chinanutri(482),
     Food.CUCUMBER: usda(2346406),
     # Food.EGG: chinanutri(978),
+    Food.EGG_SHELL_POWDER: {
+        Nutrient.CALCIUM: 0.35 * G,
+        Nutrient.MAGNESIUM: 0.014 * G
+    },
     Food.EGG: usda(748967),
     Food.OYSTER: chinanutri(1112),
+    Food.PUMPKIN: chinanutri(426),
+    Food.PORK: chinanutri(788),
+    Food.PORK_FAT: chinanutri(780),
+    Food.PORK_INTESTINE: chinanutri(790),
     Food.PORK_LIVER: chinanutri(797),
     Food.PORK_HEART: chinanutri(802),
     Food.PORK_TONGUE: chinanutri(799),

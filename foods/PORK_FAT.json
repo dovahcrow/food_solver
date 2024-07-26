@@ -1,0 +1,23 @@
+{
+    "ASH": 0.002,
+    "CALCIUM": 3e-05,
+    "CARB": 0.0,
+    "CHOLESTEROL": 0.00109,
+    "COPPER": 5e-07,
+    "ENERGY": 33190.0,
+    "FAT": 0.8859999999999999,
+    "IRON": 1e-05,
+    "MAGNESIUM": 2e-05,
+    "MANGANESE": 3e-07,
+    "NIACIN": 9e-06,
+    "PHOSPHORUS": 0.00018,
+    "POTASSIUM": 0.00023,
+    "PROTEIN": 0.024,
+    "SELENIUM": 7.8e-08,
+    "SODIUM": 0.000195,
+    "VITAMIN_A": 2.9e-07,
+    "VITAMIN_B1": 8.000000000000001e-07,
+    "VITAMIN_B2": 5e-07,
+    "ZINC": 6.9e-06,
+    "__name__": "猪肉(肥)"
+}
