@@ -26,33 +26,34 @@ def opt(day: int, detail: bool):
         # (Food.BAICAI, 0, 190),
         # (Food.BROCCOLI, 0, 90),
         (Food.BELL_PEPER, 0, 90),
-        (Food.CABBAGE, 0, 90),
-        (Food.CARROT, 0, 50),
+        # (Food.CABBAGE, 0, 90),
+        (Food.CARROT, 0, 100),
         # (Food.CELERY, 0, 50),
         # (Food.CHINESE_LETTUS, 0, 50),
         # (Food.CUCUMBER, 0, 50),
-        (Food.PORK_FAT, 0, 50),
+        # (Food.PORK_FAT, 0, 50),
         #
         # (Food.SOYBEAN_GREEN, 0, 80),
         # (Food.SWEET_POTATO, 0, 190),
-        (Food.PUMPKIN, 0, 50),
-        (Food.POTATO, 0, 190),
+        (Food.PUMPKIN, 0, 80),
+        (Food.POTATO, 0, 300),
         # (Food.BANANA, 0, 50),
         #
         # (Food.PORK_HEART, 0, 75),
-        (Food.EGG, 0, 50),
+        (Food.EGG, 0, 30),
         # (Food.OYSTER, 0, 50),
         # (Food.PORK_TONGUE, 0, 50),
         # (Food.BEEF, 0, 50),
         # (Food.CHICKEN_BREAST, 0, 50),
-        (Food.PORK_INTESTINE, 0, 50),
-        (Food.PORK, 0, 50),
-        (Food.PORK_LIVER, 0, 80),
+        # (Food.PORK_INTESTINE, 0, 50),
+        (Food.PORK, 0, 80),
+        (Food.PORK_LIVER, 0, 40),
+        # (Food.TOFU_FIRM, 0, 35),
         #
         (Food.CANOLA_OIL, 0, 10),
         (Food.SALT, 0, 2),
         (Food.EGG_SHELL_POWDER, 0, 2),
-        # (Food.BARF, 0, 4),
+        (Food.BARF, 0, 4),
     ]
     needs = dog(age=2, weight=7, active=False)
 
@@ -61,7 +62,7 @@ def opt(day: int, detail: bool):
     p.add_food(*foods)
     for nut, need in needs.items():
         p.add_need(nut, *need)
-    optimal = p.solve()
+    optimal = p.solve(weight={Food.BARF: 0.2})
 
     if optimal:
         p.print_foods(day=day)

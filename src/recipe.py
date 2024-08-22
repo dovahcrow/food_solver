@@ -51,7 +51,7 @@ class RecipeSolver:
 
         self.needs[nut] = (lb, ub, required, hard)
 
-    def solve(self) -> int:
+    def solve(self, weight: Dict[Food, float] = {}) -> int:
         self.food_names = foods = list(self.food_limits.keys())
 
         G = np.zeros((len(foods) * 2, len(foods)))
@@ -93,9 +93,10 @@ class RecipeSolver:
                 P += has.T @ has
                 q += has * -mid
 
+        w = np.asarray([weight.get(food, 0) for food in foods])
         G = cvxopt.matrix(G)
         h = cvxopt.matrix(h)
-        P = cvxopt.matrix(P.T)
+        P = cvxopt.matrix(P.T + np.diag(w ** 2))
         q = cvxopt.matrix(q.T)
 
         self.sol = cvxopt.solvers.qp(P, q, G, h, options={"show_progress": False})

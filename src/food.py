@@ -41,6 +41,7 @@ class Food(Enum):
     SOYBEAN_YELLOW = auto()
     SOY_MILK = auto()
     SWEET_POTATO = auto()
+    TOFU_FIRM = auto()
 
 
 GETTERS = {
@@ -83,7 +84,7 @@ GETTERS = {
         Nutrient.VITAMIN_B5: 13 * MG / KG,
         Nutrient.VITAMIN_B6: 16 * MG / KG,
         Nutrient.VITAMIN_B7: 436 * MCG / KG,
-        Nutrient.VITAMIN_B12: 7 * MG / KG,
+        Nutrient.VITAMIN_B12: 7 * MCG / KG,
         Nutrient.VITAMIN_D: 7.5 * MCG / KG,  # D3
         Nutrient.VITAMIN_E: 23 * MG / KG,
         Nutrient.FOLIC_ACID: 2.05 * MG / KG,
@@ -95,6 +96,7 @@ GETTERS = {
         Nutrient.PHOSPHORUS: 7600 * MG / KG,
         Nutrient.COPPER: 8.78 * MG / KG,
         Nutrient.IRON: 614 * MG / KG,
+        Nutrient.SELENIUM: 0.36 * MG / KG,
         Nutrient.ZINC: 37.5 * MG / KG,
         Nutrient.MANGANESE: 45.6 * MG / KG,
         Nutrient.IODINE: 28.4 * MG / KG,
@@ -134,6 +136,7 @@ GETTERS = {
     Food.SOYBEAN_GREEN: chinanutri(391),
     Food.SOYBEAN_YELLOW: chinanutri(326),
     Food.SOY_MILK: usda(1999630),
+    Food.TOFU_FIRM: chinanutri(334),
 }
 
 
