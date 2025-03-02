@@ -103,11 +103,11 @@ class RecipeSolver:
 
         return self.sol["status"] == "optimal"
 
-    def print_foods(self, day: float = 1):
+    def print_foods(self):
         print("Solution:")
 
         for i, f in enumerate(self.food_names):
-            amount = float(f"{self.amount(i) * day:.2g}")
+            amount = float(f"{self.amount(i):.2g}")
             print(f"  {f} = {amount:.1f}")
 
     def amount(self, food: Food | int):
@@ -121,6 +121,7 @@ class RecipeSolver:
         needs: Dict[
             Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]
         ],
+        day: int = 1,
         detail: bool = False,
     ):
         print("Nutrition:")
@@ -138,6 +139,9 @@ class RecipeSolver:
                 if nut != 0:
                     comp.append((f, self.amount(i) * nut))
                 value += self.amount(i) * nut
+            lb /= day
+            ub /= day
+            value /= day
 
             if n == Nutrient.ENERGY:
                 scale = 1000

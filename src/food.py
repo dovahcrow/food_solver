@@ -17,17 +17,24 @@ class Food(Enum):
     BAICAI = auto()
     BEEF = auto()
     BELL_PEPER = auto()
+    BOCAI = auto() # Slightly different from spinach, the root of this one is red.
+    BOKCHOY = auto()
     BROCCOLI = auto()
     CABBAGE = auto()
     CANOLA_OIL = auto()
     CARROT = auto()
     CELERY = auto()
     CHICKEN_BREAST = auto()
+    CHICKEN_HEART = auto()
+    CHICKEN_THIGH = auto()
     CHINESE_LETTUS = auto()
     CUCUMBER = auto()
     EGG = auto()
+    EGGPLANT = auto()
     EGG_SHELL_POWDER = auto()
+    LUOBO = auto() # O shape, fist size
     OYSTER = auto()
+    OKRA = auto()
     PUMPKIN = auto()
     PORK = auto()
     PORK_INTESTINE = auto()
@@ -37,11 +44,14 @@ class Food(Enum):
     PORK_FAT = auto()
     POTATO = auto()
     SALT = auto()
+    RICE = auto()
     SOYBEAN_GREEN = auto()
     SOYBEAN_YELLOW = auto()
     SOY_MILK = auto()
+    TOMATO = auto()
     SWEET_POTATO = auto()
     TOFU_FIRM = auto()
+    ZUCCHINI = auto()
 
 
 GETTERS = {
@@ -105,6 +115,8 @@ GETTERS = {
     Food.BROCCOLI: usda(747447),
     Food.BEEF: usda(2646173),
     Food.BELL_PEPER: usda(2258590),
+    Food.BOCAI: chinanutri(473),
+    Food.BOKCHOY: usda(2685572),
     Food.CANOLA_OIL: chinanutri(1495),
     Food.CABBAGE: usda(2346407),
     # Food.CARROT: chinanutri(380),
@@ -113,6 +125,8 @@ GETTERS = {
     # Food.CHICKEN_BREAST: chinanutri(880),
     # Food.CHICKEN_BREAST: usda(2646170),
     Food.CHICKEN_BREAST: convert_cooked_chicken_breast_to_uncoocked(usda(331960)),
+    Food.CHICKEN_THIGH: usda(2646171),
+    Food.CHICKEN_HEART: chinanutri(885),
     Food.CHINESE_LETTUS: chinanutri(482),
     Food.CUCUMBER: usda(2346406),
     # Food.EGG: chinanutri(978),
@@ -121,6 +135,10 @@ GETTERS = {
         Nutrient.MAGNESIUM: 0.014 * G
     },
     Food.EGG: usda(748967),
+    # Food.EGGPLANT: chinanutri(404),
+    Food.EGGPLANT: usda(2685577),
+    Food.LUOBO: chinanutri(371),
+    Food.OKRA: chinanutri(416),
     Food.OYSTER: chinanutri(1112),
     Food.PUMPKIN: chinanutri(426),
     Food.PORK: chinanutri(788),
@@ -130,13 +148,17 @@ GETTERS = {
     Food.PORK_HEART: chinanutri(802),
     Food.PORK_TONGUE: chinanutri(799),
     Food.POTATO: usda(2346403),
+    Food.RICE: usda(2512381),
     Food.SALT: chinanutri(1565),
     # Food.SWEET_POTATO: chinanutri(316),
     Food.SWEET_POTATO: usda(2346404),
     Food.SOYBEAN_GREEN: chinanutri(391),
     Food.SOYBEAN_YELLOW: chinanutri(326),
     Food.SOY_MILK: usda(1999630),
+    Food.TOMATO: chinanutri(405),
     Food.TOFU_FIRM: chinanutri(334),
+    # Food.ZUCCHINI: chinanutri(431),
+    Food.ZUCCHINI: usda(2685568),
 }
 
 
