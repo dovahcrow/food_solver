@@ -28,7 +28,7 @@ def dog(
             energy * 0.9,
             energy * 1.05,
             NeedRequired.REQUIRED,
-            NeedSoftness.SOFT,
+            NeedSoftness.HARD,
         ),  # in J
         Nutrient.PROTEIN: (
             45 * G * mod,

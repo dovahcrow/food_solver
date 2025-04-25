@@ -1,3 +1,4 @@
+from collections import defaultdict
 from json import load, dump
 from pathlib import Path
 from enum import Enum, auto, unique
@@ -11,11 +12,11 @@ from .nutrient import Nutrient, Nutrients
 
 @unique
 class Food(Enum):
+    BAICAI = auto()
     BALANCEIT = auto()
     BANANA = auto()
     BARF = auto()
     BASA_FISH = auto()
-    BAICAI = auto()
     BEEF = auto()
     BEEN_SPROUT = auto()
     BELL_PEPER = auto()
@@ -35,26 +36,27 @@ class Food(Enum):
     EGGPLANT = auto()
     EGG_SHELL_POWDER = auto()
     LUOBO = auto() # O shape, fist size
-    OYSTER = auto()
     OKRA = auto()
-    PUMPKIN = auto()
+    OYSTER = auto()
     PORK = auto()
+    PORK_FAT = auto()
+    PORK_HEART = auto()
     PORK_INTESTINE = auto()
     PORK_LIVER = auto()
-    PORK_HEART = auto()
     PORK_TONGUE = auto()
-    PORK_FAT = auto()
     POTATO = auto()
-    SALT = auto()
+    PUMPKIN = auto()
     RICE = auto()
+    SALT = auto()
     SHANYAO = auto()
     SOYBEAN_GREEN = auto()
     SOYBEAN_YELLOW = auto()
     SOY_MILK = auto()
-    TOMATO = auto()
     SWEET_POTATO = auto()
     TOFU_FIRM = auto()
+    TOMATO = auto()
     WHITE_MUSHROOM = auto()
+    WINTER_MELON = auto()
     ZUCCHINI = auto()
 
 
@@ -166,6 +168,7 @@ GETTERS = {
     # Food.ZUCCHINI: chinanutri(431),
     Food.WHITE_MUSHROOM: chinanutri(577),
     Food.BASA_FISH: chinanutri(1020), # Cannot find, use lianyu
+    Food.WINTER_MELON: chinanutri(419),
     Food.ZUCCHINI: usda(2685568),
 }
 
@@ -173,7 +176,7 @@ GETTERS = {
 def get_or_load(food: Food) -> Nutrients:
     getter = GETTERS[food]
     if isinstance(getter, dict):
-        return getter
+        return defaultdict(int, getter)
     elif callable(getter):
         pass
     else:
@@ -184,7 +187,7 @@ def get_or_load(food: Food) -> Nutrients:
     try:
         with open(f"foods/{food.name}.json") as f:
             serde = load(f)
-            nuts = {Nutrient[k]: v for k, v in serde.items() if k != "__name__"}
+            nuts = defaultdict(int, {Nutrient[k]: v for k, v in serde.items() if k != "__name__"})
             return nuts
     except FileNotFoundError:
         pass

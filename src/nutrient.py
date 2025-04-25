@@ -1,5 +1,5 @@
 from enum import Enum, unique
-from typing import Dict
+from typing import DefaultDict, Dict
 
 
 @unique
@@ -44,4 +44,4 @@ class Nutrient(Enum):
     CAROTENE = 65
 
 
-Nutrients = Dict[Nutrient, float]
+Nutrients = DefaultDict[Nutrient, float]

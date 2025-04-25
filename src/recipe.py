@@ -51,7 +51,7 @@ class RecipeSolver:
 
         self.needs[nut] = (lb, ub, required, hard)
 
-    def solve(self, weight: Dict[Food, float] = {}) -> int:
+    def solve(self) -> int:
         self.food_names = foods = list(self.food_limits.keys())
 
         G = np.zeros((len(foods) * 2, len(foods)))
@@ -59,15 +59,39 @@ class RecipeSolver:
 
         for i, food in enumerate(foods):
             lb, ub = self.food_limits[food]
+            # The food should be bigger then lb, aka -food <= -lb
             G[i, i] = -1
             h[i] = -lb
 
+            # The food should be less then ub, aka food <= ub
             G[i + len(foods), i] = 1
             h[i + len(foods)] = ub
 
         P = np.zeros((len(foods), len(foods)))
         q = np.zeros((1, len(foods)))
 
+        # In QP's form minimize \frac12 x^TPx + q^Tx
+        #            subject to Gx <= h
+        #                       Ax = b
+        #
+        # total f types of food, n types of nutrient
+        # x_j: amount of food j, m_i: mid of lb and ub nutrient i
+        #
+        # H_{ij} the food j contains how much nutrient i
+        # Minimize \sum_{i=0..n} (\sum_{j=0..f} H_{ij}x_j - m_i)^2
+        # i.e. Minimize \sum_{i=0..n} (\sum_{j=0..f,k=0..f} H_{ij}x_jH_{ik}x_k - 2 m_i \sum_{j=0..f}H_{ij}x_j + m_i^2)
+        #
+        # let P = \sum_{i=0..n} P_i
+        # let q = \sum_{i=0..n} q_i
+        #
+        # i.e. P_i = 2 H_i^T H_i
+        #      q_i = - 2 m_i H_i
+        #
+        # Normalized:
+        # Minimize (\sum_{j=0..f} \frac{H_{ij}}{m_i}x_j - 1)^2
+        # i.e. Minimize \sum_{j=0..f,k=0..f} \frac{H_{ij}H_{ik}}{m_i^2}x_jx_k - 2 \sum_{j=0}^{f}H_{ij}x_j + 1
+        # i.e. P = 2 \frac{H_i^T H_i}{m_i^2}
+        #      q = - 2 H_i
         for need, (lb, ub, required, hard) in self.needs.items():
             # if isinstance(self.provides[n], int) and self.provides[n] == 0:
             #     logging.info(f"WARN: Food lacks {n}")
@@ -75,13 +99,15 @@ class RecipeSolver:
             if required != NeedRequired.REQUIRED:
                 continue
 
-            has = np.asarray([self.food_nutrients[food].get(need, 0) for food in foods])
+            H = np.asarray([self.food_nutrients[food][need] for food in foods])
 
             if hard == NeedSoftness.HARD:
-                G = np.vstack([G, -has])
+                # The nutrient should be bigger then lb, aka -has <= -lb
+                G = np.vstack([G, -H])
                 h = np.append(h, -lb)
                 if ub is not None:
-                    G = np.vstack([G, has])
+                # The nutrient should be less then ub
+                    G = np.vstack([G, H])
                     h = np.append(h, ub)
             else:
                 if ub is None:
@@ -89,14 +115,15 @@ class RecipeSolver:
                 else:
                     mid = (lb + ub) / 2
 
-                has = has[None, :]
-                P += has.T @ has
-                q += has * -mid
+                H = H[None, :]
+                P += 2 * H.T @ H / mid / mid
+                q += -2 * H
+                # P += H.T @ H
+                # q += H * -mid
 
-        w = np.asarray([weight.get(food, 0) for food in foods])
         G = cvxopt.matrix(G)
         h = cvxopt.matrix(h)
-        P = cvxopt.matrix(P.T + np.diag(w ** 2))
+        P = cvxopt.matrix(P.T)
         q = cvxopt.matrix(q.T)
 
         self.sol = cvxopt.solvers.qp(P, q, G, h, options={"show_progress": False})
