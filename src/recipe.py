@@ -32,11 +32,11 @@ class RecipeSolver:
         self.needs = {}
         self.food_names = []
 
-    def add_food(self, *foods: Tuple[Food, float]):
-        for f, ub in foods:
+    def add_food(self, *foods: Tuple[Food, float, float]):
+        for f, lb, ub in foods:
             if f not in self.food_nutrients:
                 self.food_nutrients[f] = get_or_load(f)
-                self.food_limits[f] = (0, ub)
+                self.food_limits[f] = (lb, ub)
 
     def add_need(
         self,

@@ -14,4 +14,9 @@ dependencies = [
     "ruff>=0.0.53",
 ]
 
+[dependency-groups]
+dev = [
+    "pyright>=1.1.398",
+]
+
 

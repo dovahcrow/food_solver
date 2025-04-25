@@ -14,8 +14,10 @@ class Food(Enum):
     BALANCEIT = auto()
     BANANA = auto()
     BARF = auto()
+    BASA_FISH = auto()
     BAICAI = auto()
     BEEF = auto()
+    BEEN_SPROUT = auto()
     BELL_PEPER = auto()
     BOCAI = auto() # Slightly different from spinach, the root of this one is red.
     BOKCHOY = auto()
@@ -45,12 +47,14 @@ class Food(Enum):
     POTATO = auto()
     SALT = auto()
     RICE = auto()
+    SHANYAO = auto()
     SOYBEAN_GREEN = auto()
     SOYBEAN_YELLOW = auto()
     SOY_MILK = auto()
     TOMATO = auto()
     SWEET_POTATO = auto()
     TOFU_FIRM = auto()
+    WHITE_MUSHROOM = auto()
     ZUCCHINI = auto()
 
 
@@ -114,6 +118,7 @@ GETTERS = {
     # Food.BROCCOLI: chinanutri(465),
     Food.BROCCOLI: usda(747447),
     Food.BEEF: usda(2646173),
+    Food.BEEN_SPROUT: chinanutri(400),
     Food.BELL_PEPER: usda(2258590),
     Food.BOCAI: chinanutri(473),
     Food.BOKCHOY: usda(2685572),
@@ -149,6 +154,7 @@ GETTERS = {
     Food.PORK_TONGUE: chinanutri(799),
     Food.POTATO: usda(2346403),
     Food.RICE: usda(2512381),
+    Food.SHANYAO: chinanutri(525),
     Food.SALT: chinanutri(1565),
     # Food.SWEET_POTATO: chinanutri(316),
     Food.SWEET_POTATO: usda(2346404),
@@ -158,6 +164,8 @@ GETTERS = {
     Food.TOMATO: chinanutri(405),
     Food.TOFU_FIRM: chinanutri(334),
     # Food.ZUCCHINI: chinanutri(431),
+    Food.WHITE_MUSHROOM: chinanutri(577),
+    Food.BASA_FISH: chinanutri(1020), # Cannot find, use lianyu
     Food.ZUCCHINI: usda(2685568),
 }
 

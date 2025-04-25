@@ -3,8 +3,8 @@ name = "python"
 language-servers = [ "pyright", "ruff" ]
 
 [language-server.pyright]
-command = "pyright-langserver"
-args = ["--stdio"]
+command = "uv"
+args = ["run", "pyright-langserver", "--stdio"]
 
 [language-server.pyright.config]
 reportMissingTypeStubs = false

@@ -22,43 +22,47 @@ def main():
 @click.option("-d", "--day", required=False, type=int, default="1")
 @click.option("--detail", required=False, type=bool, default=False)
 def opt(day: int, detail: bool):
-    foods = [
+    foods_hard = [
         # (Food.BAICAI, 200),
-        # (Food.BROCCOLI, 90),
-        # (Food.BELL_PEPER, 18),
-        # (Food.EGGPLANT, 451),
-        # (Food.CABBAGE, 90),
-        (Food.CARROT, 395),
-        # (Food.BOKCHOY, 60),
-        # (Food.TOMATO, 919),
-        (Food.CELERY, 446),
-        # (Food.CHINESE_LETTUS, 50),
-        # (Food.ZUCCHINI, 75),
-        # (Food.CUCUMBER, 38),
-        # (Food.PORK_FAT, 50),
-        # (Food.LUOBO, 841),
-        #
-        # (Food.SOYBEAN_GREEN, 80),
-        # (Food.SWEET_POTATO, 1041),
-        # (Food.PUMPKIN, 1220),
-        (Food.POTATO, 563),
-        # (Food.BOCAI, 11),
         # (Food.BANANA, 50),
-        #
-        # (Food.PORK_HEART, 75),
-        # (Food.EGG, 50),
-        # (Food.OYSTER, 50),
-        # (Food.PORK_TONGUE, 50),
-        # (Food.BEEF, 27),
-        (Food.CHICKEN_BREAST, 297),
-        # (Food.CHICKEN_THIGH, 60),
+        # (Food.BEEF, 500),
+        # (Food.BASA_FISH, 484),
+        # (Food.BEEN_SPROUT, 497),
+        # (Food.BELL_PEPER, 18),
+        # (Food.BOCAI, 11),
+        # (Food.BOKCHOY, 60),
+        # (Food.BROCCOLI, 443),
+        # (Food.CABBAGE, 521),
+        # (Food.CARROT, 514),
+        # (Food.CELERY, 446),
+        # (Food.CHICKEN_BREAST, 251),
         # (Food.CHICKEN_HEART, 37),
+        # (Food.CHICKEN_THIGH, 60),
+        # (Food.CHINESE_LETTUS, 50),
+        # (Food.CUCUMBER, 38),
+        # (Food.EGG, 50),
+        # (Food.EGGPLANT, 451),
+        # (Food.LUOBO, 868),
+        (Food.WHITE_MUSHROOM, 230),
+        # (Food.OYSTER, 50),
+        (Food.PORK, 528),
+        # (Food.PORK_FAT, 50),
+        # (Food.PORK_HEART, 75),
         # (Food.PORK_INTESTINE, 50),
-        # (Food.PORK, 513),
         # (Food.PORK_LIVER, 40),
-        # (Food.TOFU_FIRM, 419),
-        # (Food.RICE, 20),
+        # (Food.PORK_TONGUE, 50),
+        (Food.POTATO, 1100),
+        # (Food.PUMPKIN, 1000),
+        # (Food.SHANYAO, 600),
+        # (Food.SOYBEAN_GREEN, 80),
+        # (Food.SWEET_POTATO, 532),
+        # (Food.TOFU_FIRM, 350),
+        # (Food.TOMATO, 1162),
+        (Food.ZUCCHINI, 850),
         #
+    ]
+    foods_opts =[
+        (Food.RICE, 500),
         (Food.CANOLA_OIL, 10 * day),
         (Food.SALT, 2 * day),
         (Food.EGG_SHELL_POWDER, 2 * day),
@@ -69,7 +73,10 @@ def opt(day: int, detail: bool):
 
     p = RecipeSolver()
 
-    p.add_food(*foods)
+    for food, ub in foods_hard:
+        p.add_food((food, ub, ub))
+    for food, ub in foods_opts:
+        p.add_food((food, 0, ub))
     for nut, need in needs.items():
         p.add_need(nut, *need)
     optimal = p.solve(weight={Food.BARF: 0})
