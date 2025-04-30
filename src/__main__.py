@@ -63,11 +63,11 @@ def opt(day: int, detail: bool):
         #
     ]
     foods_opts =[
-        (Food.RICE, 500),
-        (Food.CANOLA_OIL, 10 * day),
+        (Food.RICE, 1000),
+        (Food.CANOLA_OIL, 5 * day),
         (Food.SALT, 2 * day),
         (Food.EGG_SHELL_POWDER, 2 * day),
-        # (Food.BARF, 4),
+        (Food.BARF, 4),
     ]
     needs = dog(age=2, weight=7, active=False)
     needs = scale(needs, day)
@@ -75,9 +75,9 @@ def opt(day: int, detail: bool):
     p = RecipeSolver()
 
     for food, ub in foods_hard:
-        p.add_food((food, ub, ub))
+        p.add_food(food, ub, ub)
     for food, ub in foods_opts:
-        p.add_food((food, 0, ub))
+        p.add_food(food, 0, ub, True)
     for nut, need in needs.items():
         p.add_need(nut, *need)
     optimal = p.solve()

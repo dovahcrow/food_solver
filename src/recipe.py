@@ -23,6 +23,7 @@ class NeedRequired(Enum):
 class RecipeSolver:
     food_limits: Dict[Food, Tuple[float, float]]
     food_nutrients: Dict[Food, Nutrients]
+    food_minimize_usage: Dict[Food, bool]
     food_names: List[Food]
     needs: Dict[Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]]
 
@@ -31,12 +32,13 @@ class RecipeSolver:
         self.food_nutrients = {}
         self.needs = {}
         self.food_names = []
+        self.food_minimize_usage = {}
 
-    def add_food(self, *foods: Tuple[Food, float, float]):
-        for f, lb, ub in foods:
-            if f not in self.food_nutrients:
-                self.food_nutrients[f] = get_or_load(f)
-                self.food_limits[f] = (lb, ub)
+    def add_food(self, food: Food, lb: float, ub: float, minimize_usage: bool = False):
+        if food not in self.food_nutrients:
+            self.food_nutrients[food] = get_or_load(food)
+            self.food_limits[food] = (lb, ub)
+            self.food_minimize_usage[food] = minimize_usage
 
     def add_need(
         self,
@@ -90,8 +92,8 @@ class RecipeSolver:
         # Normalized:
         # Minimize (\sum_{j=0..f} \frac{H_{ij}}{m_i}x_j - 1)^2
         # i.e. Minimize \sum_{j=0..f,k=0..f} \frac{H_{ij}H_{ik}}{m_i^2}x_jx_k - 2 \sum_{j=0}^{f}H_{ij}x_j + 1
-        # i.e. P = 2 \frac{H_i^T H_i}{m_i^2}
-        #      q = - 2 H_i
+        # i.e. P_i = 2 \frac{H_i^T H_i}{m_i^2}
+        #      q_i = - 2 H_i
         for need, (lb, ub, required, hard) in self.needs.items():
             # if isinstance(self.provides[n], int) and self.provides[n] == 0:
             #     logging.info(f"WARN: Food lacks {n}")
@@ -121,6 +123,10 @@ class RecipeSolver:
                 # P += H.T @ H
                 # q += H * -mid
 
+        for i, food in enumerate(foods):
+            if self.food_minimize_usage[food]:
+                P[i, i] += 1
+            
         G = cvxopt.matrix(G)
         h = cvxopt.matrix(h)
         P = cvxopt.matrix(P.T)

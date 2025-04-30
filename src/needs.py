@@ -112,7 +112,7 @@ def dog(
             10 * MG * mod,
             None,
             NeedRequired.REQUIRED,
-            NeedSoftness.SOFT,
+            NeedSoftness.HARD,
         ),
         Nutrient.SELENIUM: (
             0.08 * MG * mod,
@@ -124,13 +124,13 @@ def dog(
             1 * G * mod,
             4 * G * mod,
             NeedRequired.REQUIRED,
-            NeedSoftness.SOFT,
+            NeedSoftness.HARD,
         ),
         Nutrient.SODIUM: (
             0.2 * G * mod,
             2.5 * G * mod,
             NeedRequired.REQUIRED,
-            NeedSoftness.SOFT,
+            NeedSoftness.HARD,
         ),
         # Nutrient.CHLORIDE: (
         #     0.3 * G * mod,
