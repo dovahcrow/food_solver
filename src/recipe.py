@@ -125,7 +125,7 @@ class RecipeSolver:
 
         for i, food in enumerate(foods):
             if self.food_minimize_usage[food]:
-                P[i, i] += 1
+                P[i, i] += 0.1
             
         G = cvxopt.matrix(G)
         h = cvxopt.matrix(h)

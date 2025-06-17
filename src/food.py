@@ -35,6 +35,7 @@ class Food(Enum):
     EGG = auto()
     EGGPLANT = auto()
     EGG_SHELL_POWDER = auto()
+    JIANGDOU = auto()
     LUOBO = auto() # O shape, fist size
     OKRA = auto()
     OYSTER = auto()
@@ -48,6 +49,7 @@ class Food(Enum):
     PUMPKIN = auto()
     RICE = auto()
     SALT = auto()
+    SIGUA = auto()
     SHANYAO = auto()
     SOYBEAN_GREEN = auto()
     SOYBEAN_YELLOW = auto()
@@ -144,6 +146,7 @@ GETTERS = {
     Food.EGG: usda(748967),
     # Food.EGGPLANT: chinanutri(404),
     Food.EGGPLANT: usda(2685577),
+    Food.JIANGDOU: chinanutri(398),
     Food.LUOBO: chinanutri(371),
     Food.OKRA: chinanutri(416),
     Food.OYSTER: chinanutri(1112),
@@ -159,6 +162,7 @@ GETTERS = {
     Food.SHANYAO: chinanutri(525),
     Food.SALT: chinanutri(1565),
     # Food.SWEET_POTATO: chinanutri(316),
+    Food.SIGUA: chinanutri(429),
     Food.SWEET_POTATO: usda(2346404),
     Food.SOYBEAN_GREEN: chinanutri(391),
     Food.SOYBEAN_YELLOW: chinanutri(326),
