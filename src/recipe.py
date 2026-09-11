@@ -53,7 +53,7 @@ class RecipeSolver:
 
         self.needs[nut] = (lb, ub, required, hard)
 
-    def solve(self) -> int:
+    def solve(self) -> bool:
         self.food_names = foods = list(self.food_limits.keys())
 
         G = np.zeros((len(foods) * 2, len(foods)))
@@ -72,28 +72,101 @@ class RecipeSolver:
         P = np.zeros((len(foods), len(foods)))
         q = np.zeros((1, len(foods)))
 
-        # In QP's form minimize \frac12 x^TPx + q^Tx
-        #            subject to Gx <= h
-        #                       Ax = b
+        # PROBLEM AND NOTATION
+        # --------------------
+        # Choose amounts of f foods to meet nutrient needs. Throughout this
+        # derivation, vectors x and q are columns; H_i is a row vector.
         #
-        # total f types of food, n types of nutrient
-        # x_j: amount of food j, m_i: mid of lb and ub nutrient i
+        #   x_j    = grams of food j in the entire recipe/batch
+        #   H_ij   = amount of nutrient i per gram of food j
+        #   H_i    = [H_i0, ..., H_i(f-1)], shape (1, f)
+        #   H_i x  = sum_j H_ij*x_j = total amount of nutrient i supplied
+        #   m_i    = positive target for nutrient i (called `mid` below)
         #
-        # H_{ij} the food j contains how much nutrient i
-        # Minimize \sum_{i=0..n} (\sum_{j=0..f} H_{ij}x_j - m_i)^2
-        # i.e. Minimize \sum_{i=0..n} (\sum_{j=0..f,k=0..f} H_{ij}x_jH_{ik}x_k - 2 m_i \sum_{j=0..f}H_{ij}x_j + m_i^2)
+        # Nutrient masses use grams, energy uses joules. H_i x and m_i must
+        # have matching units and cover the same number of days.
+        # Only REQUIRED + SOFT nutrients enter the nutrient objective below.
+        # REQUIRED + HARD nutrients instead become inequality constraints;
+        # NOT_REQUIRED nutrients are skipped, including their bounds.
         #
-        # let P = \sum_{i=0..n} P_i
-        # let q = \sum_{i=0..n} q_i
+        # 1. ORIGINAL OBJECTIVE: ABSOLUTE SQUARED ERROR
+        # --------------------------------------------
+        # Start with: minimize sum_i (sum_j H_ij*x_j - m_i)^2.
+        # For one nutrient, expanding the square gives:
         #
-        # i.e. P_i = 2 H_i^T H_i
-        #      q_i = - 2 m_i H_i
+        #   (H_i x - m_i)^2
+        #     = (H_i x)^2 - 2*m_i*H_i x + m_i^2
+        #     = x.T (H_i.T H_i) x - 2*m_i*H_i x + m_i^2.
         #
-        # Normalized:
-        # Minimize (\sum_{j=0..f} \frac{H_{ij}}{m_i}x_j - 1)^2
-        # i.e. Minimize \sum_{j=0..f,k=0..f} \frac{H_{ij}H_{ik}}{m_i^2}x_jx_k - 2 \sum_{j=0}^{f}H_{ij}x_j + 1
-        # i.e. P_i = 2 \frac{H_i^T H_i}{m_i^2}
-        #      q_i = - 2 H_i
+        # H_i.T H_i is an outer product, an (f, f) matrix whose (j, k)
+        # entry is H_ij*H_ik; it includes cross terms between foods.
+        # This absolute-error objective depends on measurement units:
+        # a 1 g error contributes 1, while a 1 mg error contributes 1e-6
+        # when both are stored in grams. Macronutrients can dominate.
+        #
+        # 2. IMPLEMENTED OBJECTIVE: RELATIVE SQUARED ERROR
+        # -----------------------------------------------
+        # Divide EACH nutrient's error by its own target before squaring:
+        #
+        #   minimize sum_i ((H_i x - m_i) / m_i)^2
+        #          = sum_i (H_i x / m_i - 1)^2.
+        #
+        # The "1" is m_i/m_i, not an extra nutrient target. A 10% error
+        # contributes 0.01 for any nutrient, regardless of its mass/unit.
+        # This changes the relative weights: it is the original objective
+        # weighted by 1/m_i^2, NOT an equivalent algebraic rewrite of it.
+        #
+        # Define R_i = H_i/m_i (a normalized row). Expanding again:
+        #
+        #   (R_i x - 1)^2 = x.T (R_i.T R_i) x - 2*R_i x + 1.
+        #
+        # 3. MATCH THE COEFFICIENTS TO CVXOPT
+        # ----------------------------------
+        # cvxopt.solvers.qp(P, q, G, h) solves:
+        #
+        #   minimize    0.5*x.T P x + q.T x
+        #   subject to  G x <= h.
+        #
+        # Its quadratic matrix is called P and its linear vector is q
+        # (lowercase). Matching the preceding expansion, each nutrient adds:
+        #
+        #   P_i =  2*R_i.T R_i =  2*H_i.T H_i / m_i^2
+        #   q_i = -2*R_i.T     = -2*H_i.T / m_i.
+        #
+        # Sum these contributions over all participating soft nutrients.
+        # The factor 2 in P cancels CVXOPT's factor 0.5. The constant +1
+        # per nutrient can be dropped because it cannot change the best x.
+        # P is positive semidefinite (a sum of outer products), so the
+        # objective is convex, though the best recipe need not be unique.
+        #
+        # For comparison, the UNNORMALIZED objective would require BOTH:
+        #   P_i = 2*H_i.T H_i,    q_i = -2*m_i*H_i.T.
+        # Do not mix these formulas: normalizing P but not q changes the
+        # target. Example: H_i=[0.001], m_i=0.0105 should select x=10.5 g
+        # in the absence of other objectives or binding constraints.
+        #
+        # IMPLEMENTATION DETAILS AND CONSTRAINTS
+        # --------------------------------------
+        # Below, `H` starts as a 1-D array of raw nutrient densities. The
+        # assignment H = H[None, :] / mid turns it into R_i, shape (1, f).
+        # `@` is matrix multiplication. We accumulate q as a (1, f) ROW
+        # for convenience, then transpose it into CVXOPT's (f, 1) column.
+        # P is symmetric; its later transpose does not change its values.
+        #
+        # If no upper bound is given, m_i = 1.05*lb; otherwise m_i is the
+        # midpoint of lb and ub. These are preferences, not hard limits:
+        # this objective penalizes deviations even INSIDE the interval,
+        # and it permits shortfalls/excesses when other terms compete.
+        # A missing nutrient recorded as zero cannot be supplied by that
+        # food in the model. If an entire row is zero, its error is constant
+        # and adds no preference; a soft target does not make this infeasible.
+        #
+        # Hard bounds are expressed separately in G x <= h:
+        #   food lb <= x_j <= ub:       -x_j <= -lb,    x_j <= ub
+        #   nutrient lb <= H_i x <= ub: -H_i x <= -lb, H_i x <= ub.
+        # Omit the upper inequality when ub is None. These use RAW H_i,
+        # not normalized R_i. An "optimal" status certifies this mathematical
+        # problem was solved, not that every soft nutrient bound was met.
         for need, (lb, ub, required, hard) in self.needs.items():
             # if isinstance(self.provides[n], int) and self.provides[n] == 0:
             #     logging.info(f"WARN: Food lacks {n}")
@@ -108,7 +181,7 @@ class RecipeSolver:
                 G = np.vstack([G, -H])
                 h = np.append(h, -lb)
                 if ub is not None:
-                # The nutrient should be less then ub
+                    # The nutrient should be less then ub
                     G = np.vstack([G, H])
                     h = np.append(h, ub)
             else:
@@ -117,15 +190,26 @@ class RecipeSolver:
                 else:
                     mid = (lb + ub) / 2
 
-                H = H[None, :]
-                P += 2 * H.T @ H / mid / mid
+                if not np.isfinite(mid) or mid <= 0:
+                    raise ValueError(f"Soft target for {need.name} must be positive and finite")
+                H = H[None, :] / mid
+                P += 2 * H.T @ H
                 q += -2 * H
-                # P += H.T @ H
-                # q += H * -mid
 
         for i, food in enumerate(foods):
             if self.food_minimize_usage[food]:
-                P[i, i] += 0.1
+                # Penalize the fraction of available stock, not grams squared.
+                # Scaling both inventory and needs preserves recipe proportions.
+                # Desired extra objective: 0.05*(x_i/ub)**2.
+                # Since CVXOPT uses 0.5*x.T P x, add 0.1/ub**2 to P[i, i].
+                # There is no linear contribution to q. This preference can
+                # trade off against nutrient targets. A zero upper bound
+                # already fixes the food at zero (for valid nonnegative bounds).
+                ub = self.food_limits[food][1]
+                if not np.isfinite(ub) or ub < 0:
+                    raise ValueError("minimize_usage requires a finite nonnegative upper bound")
+                if ub > 0:
+                    P[i, i] += 0.1 / ub**2
             
         G = cvxopt.matrix(G)
         h = cvxopt.matrix(h)
