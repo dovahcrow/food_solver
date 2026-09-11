@@ -1,13 +1,12 @@
 from collections import defaultdict
-from json import load, dump
-from pathlib import Path
 from enum import Enum, auto, unique
+from json import dump, load
+from pathlib import Path
 
-from .food_getters.usda import convert_cooked_chicken_breast_to_uncoocked
-from .food_getters.usda import usda
-from .units import KG, MCG, MG, G
 from .food_getters.chinanutri import chinanutri
+from .food_getters.usda import convert_cooked_chicken_breast_to_uncoocked, usda
 from .nutrient import Nutrient, Nutrients
+from .units import KG, MCG, MG, G
 
 
 @unique
@@ -20,7 +19,7 @@ class Food(Enum):
     BEEF = auto()
     BEEN_SPROUT = auto()
     BELL_PEPER = auto()
-    BOCAI = auto() # Slightly different from spinach, the root of this one is red.
+    BOCAI = auto()  # Slightly different from spinach, the root of this one is red.
     BOKCHOY = auto()
     BROCCOLI = auto()
     CABBAGE = auto()
@@ -30,13 +29,21 @@ class Food(Enum):
     CHICKEN_BREAST = auto()
     CHICKEN_HEART = auto()
     CHICKEN_THIGH = auto()
+    CHICKEN_LIVER = auto()
+    CHICKEN_GIZZARD = auto()
     CHINESE_LETTUS = auto()
     CUCUMBER = auto()
+    DUCK_GIZZARD = auto()
     EGG = auto()
     EGGPLANT = auto()
     EGG_SHELL_POWDER = auto()
+    FUGUA = auto()
     JIANGDOU = auto()
-    LUOBO = auto() # O shape, fist size
+    JIEGUA = auto()
+    JUANXINCAI = auto()
+    KONGXINCAI = auto()
+    KUIGUA = auto()
+    LUOBO = auto()  # O shape, fist size
     OKRA = auto()
     OYSTER = auto()
     PORK = auto()
@@ -47,18 +54,23 @@ class Food(Enum):
     PORK_TONGUE = auto()
     POTATO = auto()
     PUMPKIN = auto()
+    QINCAI = auto()
     RICE = auto()
     SALT = auto()
     SIGUA = auto()
+    SIJIDOU = auto()
     SHANYAO = auto()
+    SHITAKE = auto()
     SOYBEAN_GREEN = auto()
     SOYBEAN_YELLOW = auto()
     SOY_MILK = auto()
     SWEET_POTATO = auto()
     TOFU_FIRM = auto()
+    TOFU_SOFT = auto()
     TOMATO = auto()
     WHITE_MUSHROOM = auto()
     WINTER_MELON = auto()
+    ZIGANLAN = auto()
     ZUCCHINI = auto()
 
 
@@ -88,6 +100,7 @@ GETTERS = {
         Nutrient.CHOLINE: 490.18 * MG / 20,
     },
     Food.BAICAI: chinanutri(450),
+    Food.JUANXINCAI: chinanutri(463),
     # Food.BANANA: chinanutri(726),
     Food.BANANA: usda(1105314),
     Food.BARF: {
@@ -134,19 +147,23 @@ GETTERS = {
     # Food.CHICKEN_BREAST: chinanutri(880),
     # Food.CHICKEN_BREAST: usda(2646170),
     Food.CHICKEN_BREAST: convert_cooked_chicken_breast_to_uncoocked(usda(331960)),
-    Food.CHICKEN_THIGH: usda(2646171),
     Food.CHICKEN_HEART: chinanutri(885),
+    Food.CHICKEN_LIVER: chinanutri(884),
+    Food.CHICKEN_GIZZARD: chinanutri(887),
+    Food.CHICKEN_THIGH: usda(2646171),
     Food.CHINESE_LETTUS: chinanutri(482),
     Food.CUCUMBER: usda(2346406),
+    Food.DUCK_GIZZARD: chinanutri(900),
     # Food.EGG: chinanutri(978),
-    Food.EGG_SHELL_POWDER: {
-        Nutrient.CALCIUM: 0.35 * G,
-        Nutrient.MAGNESIUM: 0.014 * G
-    },
+    Food.EGG_SHELL_POWDER: {Nutrient.CALCIUM: 0.35 * G, Nutrient.MAGNESIUM: 0.014 * G},
     Food.EGG: usda(748967),
     # Food.EGGPLANT: chinanutri(404),
     Food.EGGPLANT: usda(2685577),
+    Food.FUGUA: chinanutri(421),
     Food.JIANGDOU: chinanutri(398),
+    Food.JIEGUA: chinanutri(423),
+    Food.KONGXINCAI: chinanutri(493),
+    Food.KUIGUA: chinanutri(420),
     Food.LUOBO: chinanutri(371),
     Food.OKRA: chinanutri(416),
     Food.OYSTER: chinanutri(1112),
@@ -159,20 +176,25 @@ GETTERS = {
     Food.PORK_TONGUE: chinanutri(799),
     Food.POTATO: usda(2346403),
     Food.RICE: usda(2512381),
+    Food.QINCAI: chinanutri(479),
     Food.SHANYAO: chinanutri(525),
     Food.SALT: chinanutri(1565),
     # Food.SWEET_POTATO: chinanutri(316),
+    Food.SIJIDOU: chinanutri(392),
     Food.SIGUA: chinanutri(429),
     Food.SWEET_POTATO: usda(2346404),
     Food.SOYBEAN_GREEN: chinanutri(391),
     Food.SOYBEAN_YELLOW: chinanutri(326),
     Food.SOY_MILK: usda(1999630),
+    Food.SHITAKE: chinanutri(584),
     Food.TOMATO: chinanutri(405),
     Food.TOFU_FIRM: chinanutri(334),
+    Food.TOFU_SOFT: chinanutri(335),
     # Food.ZUCCHINI: chinanutri(431),
     Food.WHITE_MUSHROOM: chinanutri(577),
-    Food.BASA_FISH: chinanutri(1020), # Cannot find, use lianyu
+    Food.BASA_FISH: chinanutri(1020),  # Cannot find, use lianyu
     Food.WINTER_MELON: chinanutri(419),
+    Food.ZIGANLAN: chinanutri(463),
     Food.ZUCCHINI: usda(2685568),
 }
 
@@ -191,7 +213,9 @@ def get_or_load(food: Food) -> Nutrients:
     try:
         with open(f"foods/{food.name}.json") as f:
             serde = load(f)
-            nuts = defaultdict(int, {Nutrient[k]: v for k, v in serde.items() if k != "__name__"})
+            nuts = defaultdict(
+                int, {Nutrient[k]: v for k, v in serde.items() if k != "__name__"}
+            )
             return nuts
     except FileNotFoundError:
         pass

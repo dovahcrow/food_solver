@@ -5,6 +5,8 @@ MCG = MG / 1000
 KG = 1000 * G
 KJ = 1000
 KCAL = 4184
+# Vitamin activity equivalents; E uses natural RRR-alpha-tocopherol.
+# Do not apply this E factor to arbitrary synthetic vitamin E preparations.
 VITAMIN_A_IU = 0.3 * MCG
 VITAMIN_D_IU = 0.025 * MCG
 VITAMIN_E_IU = 0.67 * MG
