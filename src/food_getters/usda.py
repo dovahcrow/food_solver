@@ -28,7 +28,7 @@ def usda(id: int) -> Callable[[], Tuple[str, Dict[Nutrient, float]]]:
 
             # print(name, value, f"'{(unit)}'")
 
-            if (
+            if name not in NAME_TO_ENUM and (
                 name.startswith("MUFA")
                 or name.startswith("SFA")
                 or name.startswith("PUFA")
@@ -68,6 +68,14 @@ def convert_cooked_chicken_breast_to_uncoocked(
 
 
 NAME_TO_ENUM = {
+    # Map chemically identified fatty acids only. Unspecified "18:2"/"18:3"
+    # and total PUFA cannot safely be treated as linoleic acid / ALA.
+    "PUFA 18:2 n-6 c,c": Nutrient.LINOLEIC_ACID,
+    "PUFA 18:3 n-3 c,c,c (ALA)": Nutrient.ALPHA_LINOLENIC_ACID,
+    "PUFA 20:4 n-6": Nutrient.ARACHIDONIC_ACID,
+    "PUFA 20:5 n-3 (EPA)": Nutrient.EPA,
+    "PUFA 22:6 n-3 (DHA)": Nutrient.DHA,
+
     "Water": None,
     "Nitrogen": None,
     "Protein": Nutrient.PROTEIN,
@@ -131,17 +139,17 @@ NAME_TO_ENUM = {
     "Fatty acids, total monounsaturated": None,
     "Fatty acids, total polyunsaturated": None,
     "Cholesterol": Nutrient.CHOLESTEROL,
-    "Tryptophan": None,
-    "Threonine": None,
-    "Isoleucine": None,
-    "Leucine": None,
-    "Lysine": None,
-    "Methionine": None,
-    "Phenylalanine": None,
-    "Tyrosine": None,
-    "Valine": None,
-    "Arginine": None,
-    "Histidine": None,
+    "Tryptophan": Nutrient.TRYPTOPHAN,
+    "Threonine": Nutrient.THREONINE,
+    "Isoleucine": Nutrient.ISOLEUCINE,
+    "Leucine": Nutrient.LEUCINE,
+    "Lysine": Nutrient.LYSINE,
+    "Methionine": Nutrient.METHIONINE,
+    "Phenylalanine": Nutrient.PHENYLALANINE,
+    "Tyrosine": Nutrient.TYROSINE,
+    "Valine": Nutrient.VALINE,
+    "Arginine": Nutrient.ARGININE,
+    "Histidine": Nutrient.HISTIDINE,
     "Alanine": None,
     "Aspartic acid": None,
     "Glutamic acid": None,
@@ -169,7 +177,7 @@ NAME_TO_ENUM = {
     "Tocotrienol, beta": None,
     "Tocotrienol, gamma": None,
     "Tocotrienol, delta": None,
-    "Cystine": None,
+    "Cystine": Nutrient.CYSTINE,
     "Biotin": None,
     "Total dietary fiber (AOAC 2011.25)": None,
     "High Molecular Weight Dietary Fiber (HMWDF)": None,

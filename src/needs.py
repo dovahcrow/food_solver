@@ -10,8 +10,8 @@ from .nutrient import Nutrient
 
 # FEDIAF 2025, Table III-3b (adult dogs, per 1000 kcal ME):
 # https://europeanpetfood.org/wp-content/uploads/2025/09/FEDIAF-Nutritional-Guidelines_2025-ONLINE.pdf
-# Only the nutrients already modelled here are included. This is not a complete
-# nutritional adequacy check. Maxima below are nutritional (N), not EU legal (L)
+# All numeric adult minimum rows in Table III-3b are represented. This is
+# not a complete nutritional adequacy check (food data may be incomplete). Maxima below are nutritional (N), not EU legal (L)
 # limits on a dry-matter basis; we cannot apply the latter without dry matter.
 def dog(
     *, age: float, weight: float, active: bool,
@@ -43,6 +43,114 @@ def dog(
         return ordinary_activity if active else low_activity
 
     return {
+        # Additional adult minima (95 / 110 kcal profiles), all SOFT because
+        # food composition data may be incomplete. Individual methionine and
+        # phenylalanine minima apply alongside their combined targets.
+        # Adult ALA, arachidonic acid, EPA+DHA, biotin and vitamin K have no
+        # numeric minimum in this table: do not import puppy values or invent
+        # zero targets (normalization requires a strictly positive target).
+        Nutrient.FAT: (
+            minimum(13.75, 13.75) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.LINOLEIC_ACID: (
+            minimum(3.82, 3.27) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.ARGININE: (
+            minimum(1.51, 1.3) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.HISTIDINE: (
+            minimum(0.67, 0.58) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.ISOLEUCINE: (
+            minimum(1.33, 1.15) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.LEUCINE: (
+            minimum(2.37, 2.05) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.LYSINE: (
+            minimum(1.22, 1.05) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.METHIONINE: (
+            minimum(1.16, 1.0) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.METHIONINE_CYSTINE: (
+            minimum(2.21, 1.91) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.PHENYLALANINE: (
+            minimum(1.56, 1.35) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.PHENYLALANINE_TYROSINE: (
+            minimum(2.58, 2.23) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.THREONINE: (
+            minimum(1.51, 1.3) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.TRYPTOPHAN: (
+            minimum(0.49, 0.43) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.VALINE: (
+            minimum(1.71, 1.48) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.VITAMIN_B5: (
+            minimum(4.11, 3.55) * MG * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.FOLIC_ACID: (
+            minimum(74.7, 64.5) * MCG * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
+        Nutrient.CHLORIDE: (
+            minimum(0.43, 0.38) * G * mod,
+            None,
+            NeedRequired.REQUIRED,
+            NeedSoftness.SOFT,
+        ),
         Nutrient.ENERGY: (
             energy * 0.9,
             energy * 1.05,

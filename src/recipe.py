@@ -5,7 +5,7 @@ import cvxopt
 
 from .units import MCG, MG, G
 from .food import Food, get_or_load
-from .nutrient import Nutrient, Nutrients
+from .nutrient import Nutrient, Nutrients, nutrient_value
 
 # https://cvxopt.org/userguide/coneprog.html#quadratic-programming
 
@@ -190,7 +190,7 @@ class RecipeSolver:
             if required != NeedRequired.REQUIRED:
                 continue
 
-            H = np.asarray([self.food_nutrients[food][need] for food in foods])
+            H = np.asarray([nutrient_value(self.food_nutrients[food], need)[0] for food in foods])
 
             if hard == NeedSoftness.HARD:
                 # The nutrient should be bigger then lb, aka -has <= -lb
@@ -284,8 +284,11 @@ class RecipeSolver:
 
             value = 0
             comp = []
+            missing = []
             for i, f in enumerate(self.food_names):
-                nut = self.food_nutrients[f].get(n, 0)
+                nut, known = nutrient_value(self.food_nutrients[f], n)
+                if not known and self.amount(i) > 1e-6:
+                    missing.append(f.name)
                 if nut != 0:
                     comp.append((f, self.amount(i) * nut))
                 value += self.amount(i) * nut
@@ -334,8 +337,9 @@ class RecipeSolver:
             else:
                 color = BColors.LIGHT_GREEN
 
+            coverage = f"; incomplete data: {', '.join(missing)}" if missing else ""
             print(
-                f"{color}  {n}{comp_str}, valid: {lb:.2f} ~ {ub:.2f} {unit}{BColors.ENDC}"
+                f"{color}  {n}{comp_str}, valid: {lb:.2f} ~ {ub:.2f} {unit}{coverage}{BColors.ENDC}"
             )
 
 

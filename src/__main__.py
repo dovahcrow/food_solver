@@ -2,7 +2,7 @@ import logging
 
 import click
 
-from .food import Food
+from .food import Food, get_or_load
 from .needs import dog, scale
 from .nutrient import Nutrient
 from .recipe import RecipeSolver
@@ -17,6 +17,15 @@ logging.basicConfig(
 @click.group()
 def main():
     pass
+
+
+@main.command("refresh-foods")
+@click.argument("foods", nargs=-1, required=True, type=click.Choice([f.name for f in Food]))
+def refresh_foods(foods):
+    """Re-fetch named foods so older caches can include newly mapped nutrients."""
+    for name in foods:
+        get_or_load(Food[name], refresh=True)
+        click.echo(f"Refreshed {name}")
 
 
 @main.command()

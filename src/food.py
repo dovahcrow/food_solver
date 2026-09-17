@@ -76,6 +76,8 @@ class Food(Enum):
 
 GETTERS = {
     Food.BALANCEIT: {
+        # Model other nutrients as zero rather than missing data.
+        **{nutrient: 0.0 for nutrient in Nutrient},
         Nutrient.CALCIUM: 3.036 * G / 20,
         Nutrient.PHOSPHORUS: 1.596 * G / 20,
         Nutrient.POTASSIUM: 2.0184 * G / 20,
@@ -104,6 +106,8 @@ GETTERS = {
     # Food.BANANA: chinanutri(726),
     Food.BANANA: usda(1105314),
     Food.BARF: {
+        # Model other nutrients as zero rather than missing data.
+        **{nutrient: 0.0 for nutrient in Nutrient},
         Nutrient.ASH: 182 * G / KG,
         Nutrient.FIBER: 70 * G / KG,
         Nutrient.PROTEIN: 27.5 * G / KG,
@@ -155,7 +159,12 @@ GETTERS = {
     Food.CUCUMBER: usda(2346406),
     Food.DUCK_GIZZARD: chinanutri(900),
     # Food.EGG: chinanutri(978),
-    Food.EGG_SHELL_POWDER: {Nutrient.CALCIUM: 0.35 * G, Nutrient.MAGNESIUM: 0.014 * G},
+    Food.EGG_SHELL_POWDER: {
+        # Model other nutrients as zero rather than missing data.
+        **{nutrient: 0.0 for nutrient in Nutrient},
+        Nutrient.CALCIUM: 0.35 * G,
+        Nutrient.MAGNESIUM: 0.014 * G,
+    },
     Food.EGG: usda(748967),
     # Food.EGGPLANT: chinanutri(404),
     Food.EGGPLANT: usda(2685577),
@@ -199,7 +208,7 @@ GETTERS = {
 }
 
 
-def get_or_load(food: Food) -> Nutrients:
+def get_or_load(food: Food, *, refresh: bool = False) -> Nutrients:
     getter = GETTERS[food]
     if isinstance(getter, dict):
         return defaultdict(int, getter)
@@ -211,6 +220,8 @@ def get_or_load(food: Food) -> Nutrients:
     Path("foods").mkdir(parents=True, exist_ok=True)
 
     try:
+        if refresh:
+            raise FileNotFoundError
         with open(f"foods/{food.name}.json") as f:
             serde = load(f)
             nuts = defaultdict(

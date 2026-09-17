@@ -43,5 +43,53 @@ class Nutrient(Enum):
     CHOLINE = 64
     CAROTENE = 65
 
+    # Individual amino acids and FEDIAF's combined amino-acid targets.
+    ARGININE = 71
+    HISTIDINE = 72
+    ISOLEUCINE = 73
+    LEUCINE = 74
+    LYSINE = 75
+    METHIONINE = 76
+    CYSTINE = 77
+    PHENYLALANINE = 78
+    TYROSINE = 79
+    THREONINE = 80
+    TRYPTOPHAN = 81
+    VALINE = 82
+    METHIONINE_CYSTINE = 83
+    PHENYLALANINE_TYROSINE = 84
+
+    LINOLEIC_ACID = 91
+    ALPHA_LINOLENIC_ACID = 92
+    ARACHIDONIC_ACID = 93
+    EPA = 94
+    DHA = 95
+    EPA_DHA = 96
+
 
 Nutrients = DefaultDict[Nutrient, float]
+
+
+# Combined requirements are sums, not replacements for the individual minima.
+COMBINED_NUTRIENTS = {
+    Nutrient.METHIONINE_CYSTINE: (Nutrient.METHIONINE, Nutrient.CYSTINE),
+    Nutrient.PHENYLALANINE_TYROSINE: (Nutrient.PHENYLALANINE, Nutrient.TYROSINE),
+    Nutrient.EPA_DHA: (Nutrient.EPA, Nutrient.DHA),
+}
+
+
+def nutrient_value(nutrients, nutrient):
+    """Return (known contribution, complete data), without inserting fake zeros.
+
+    With one component missing, a combined target uses the known partial sum
+    and remains marked incomplete. A legacy B5 name is a fallback, never an
+    additional contribution to the same vitamin.
+    """
+    if nutrient in nutrients:
+        return nutrients[nutrient], True
+    if nutrient == Nutrient.VITAMIN_B5 and Nutrient.PANTOTHENIC_ACID in nutrients:
+        return nutrients[Nutrient.PANTOTHENIC_ACID], True
+    if nutrient in COMBINED_NUTRIENTS:
+        parts = [nutrient_value(nutrients, n) for n in COMBINED_NUTRIENTS[nutrient]]
+        return sum(v for v, _ in parts), all(known for _, known in parts)
+    return 0., False
