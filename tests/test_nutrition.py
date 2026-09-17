@@ -43,6 +43,49 @@ class ObjectiveTests(unittest.TestCase):
         self.assertAlmostEqual(p.amount(0), 100., places=3)
 
 
+class RatioTests(unittest.TestCase):
+    def solve_recipe(self, calcium_target, days=1, with_ratio=True):
+        p = RecipeSolver()
+        # Synthetic foods isolate the ratio from real database incompleteness.
+        p.food_limits = {Food.EGG_SHELL_POWDER: (0., 400. * days),
+                         Food.RICE: (100. * days, 100. * days)}
+        p.food_nutrients = {
+            Food.EGG_SHELL_POWDER: defaultdict(float, {Nutrient.CALCIUM: .01}),
+            Food.RICE: defaultdict(float, {Nutrient.PHOSPHORUS: .01}),
+        }
+        p.food_minimize_usage = {food: False for food in p.food_limits}
+        # Absolute limits alone allow the intentionally bad soft targets.
+        for nutrient in (Nutrient.CALCIUM, Nutrient.PHOSPHORUS):
+            p.add_need(nutrient, .1 * days, 4. * days,
+                       NeedRequired.REQUIRED, NeedSoftness.HARD)
+        # A separate soft nutrient supplied by the calcium food steers the
+        # unconstrained calcium total to calcium_target grams per day.
+        p.food_nutrients[Food.EGG_SHELL_POWDER][Nutrient.ZINC] = .01
+        p.add_need(Nutrient.ZINC, calcium_target * days / 1.05, None,
+                   NeedRequired.REQUIRED, NeedSoftness.SOFT)
+        if with_ratio:
+            p.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1., 2.)
+        self.assertTrue(p.solve())
+        calcium = .01 * p.amount(Food.EGG_SHELL_POWDER)
+        phosphorus = .01 * p.amount(Food.RICE)
+        return calcium / phosphorus
+
+    def test_ratio_bounds_override_soft_preferences(self):
+        for target, expected in ((.5, 1.), (1.5, 1.5), (3., 2.)):
+            for days in (1, 10):
+                with self.subTest(target=target, days=days):
+                    self.assertAlmostEqual(self.solve_recipe(target, days), expected, places=4)
+
+    def test_absolute_bounds_alone_allow_bad_ratios(self):
+        self.assertAlmostEqual(self.solve_recipe(.5, with_ratio=False), .5, places=4)
+        self.assertAlmostEqual(self.solve_recipe(3., with_ratio=False), 3., places=4)
+
+    def test_invalid_ratio_bounds(self):
+        for lb, ub in ((0, 2), (-1, 2), (2, 1), (1, float('inf')), (float('nan'), 2)):
+            with self.subTest(lb=lb, ub=ub), self.assertRaises(ValueError):
+                RecipeSolver().add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, lb, ub)
+
+
 class NeedsTests(unittest.TestCase):
     def test_reference_profile_and_units(self):
         n = dog(age=3, weight=7, active=False, daily_kcal=1000)

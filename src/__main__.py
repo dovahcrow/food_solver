@@ -4,6 +4,7 @@ import click
 
 from .food import Food
 from .needs import dog, scale
+from .nutrient import Nutrient
 from .recipe import RecipeSolver
 
 logging.basicConfig(
@@ -98,6 +99,9 @@ def opt(day: int, detail: bool, daily_kcal: float | None = None):
         p.add_food(food, 0, ub, True)
     for nut, need in needs.items():
         p.add_need(nut, *need)
+    # FEDIAF 2025 Table III-3b, adult maintenance: mass ratio Ca:P 1:1..2:1.
+    # Dimensionless: do not scale these bounds by the batch's number of days.
+    p.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1., 2.)
     optimal = p.solve()
 
     if optimal:

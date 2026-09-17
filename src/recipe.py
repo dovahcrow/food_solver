@@ -33,6 +33,22 @@ class RecipeSolver:
         self.needs = {}
         self.food_names = []
         self.food_minimize_usage = {}
+        self.nutrient_ratios: Dict[Tuple[Nutrient, Nutrient], Tuple[float, float]] = {}
+
+    def add_nutrient_ratio(
+        self, numerator: Nutrient, denominator: Nutrient, lb: float, ub: float,
+    ) -> None:
+        """Add a hard mass-ratio interval; both nutrients must use the same unit.
+
+        Keep a positive absolute requirement for the denominator separately:
+        the linear inequalities alone also permit both totals to be zero.
+        Ratio bounds are dimensionless and must not be multiplied by days.
+        """
+        if numerator == denominator:
+            raise ValueError("Ratio nutrients must be different")
+        if not np.isfinite(lb) or not np.isfinite(ub) or not 0 < lb <= ub:
+            raise ValueError("Ratio bounds must be finite and satisfy 0 < lb <= ub")
+        self.nutrient_ratios[numerator, denominator] = (lb, ub)
 
     def add_food(self, food: Food, lb: float, ub: float, minimize_usage: bool = False):
         if food not in self.food_nutrients:
@@ -195,6 +211,23 @@ class RecipeSolver:
                 H = H[None, :] / mid
                 P += 2 * H.T @ H
                 q += -2 * H
+
+        for (numerator, denominator), (lb, ub) in self.nutrient_ratios.items():
+            N = np.asarray([self.food_nutrients[f].get(numerator, 0) for f in foods])
+            D = np.asarray([self.food_nutrients[f].get(denominator, 0) for f in foods])
+            # N and D are raw nutrient mass per gram of each food, NOT the
+            # normalized objective rows above. For a positive total D @ x:
+            #
+            #   lb <= (N @ x)/(D @ x) <= ub
+            #   N @ x >= lb*(D @ x)  ->  (lb*D - N) @ x <= 0
+            #   N @ x <= ub*(D @ x)  ->  (N - ub*D) @ x <= 0
+            #
+            # Thus the ratio adds two linear rows to G x <= h, with h=0;
+            # it does not change the quadratic objective P or q.
+            # Adult dog Ca:P=1:1..2:1 gives (D-N)@x<=0, (N-2*D)@x<=0.
+            # Absolute calcium/phosphorus bounds still apply independently.
+            G = np.vstack([G, lb * D - N, N - ub * D])
+            h = np.append(h, [0., 0.])
 
         for i, food in enumerate(foods):
             if self.food_minimize_usage[food]:
