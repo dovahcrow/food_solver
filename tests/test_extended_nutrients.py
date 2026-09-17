@@ -70,7 +70,7 @@ class ExtendedNutrientTests(unittest.TestCase):
         p.food_limits = {Food.RICE: (0., 100.)}
         p.food_nutrients = {Food.RICE: defaultdict(float, {N.METHIONINE: .01, N.CYSTINE: .01})}
         p.food_minimize_usage = {Food.RICE: False}
-        p.add_need(N.METHIONINE_CYSTINE, .2, None, NeedRequired.REQUIRED, NeedSoftness.SOFT)
+        p.add_need(N.METHIONINE_CYSTINE, .21, .21, NeedRequired.REQUIRED, NeedSoftness.SOFT)
         p.add_need(N.LINOLEIC_ACID, .1, None, NeedRequired.REQUIRED, NeedSoftness.SOFT)
         self.assertTrue(p.solve())
         self.assertAlmostEqual(p.amount(0), 10.5, places=4)

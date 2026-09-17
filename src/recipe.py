@@ -87,6 +87,7 @@ class RecipeSolver:
 
         P = np.zeros((len(foods), len(foods)))
         q = np.zeros((1, len(foods)))
+        shortages = []  # (raw nutrient row, positive lower bound)
 
         # PROBLEM AND NOTATION
         # --------------------
@@ -120,7 +121,7 @@ class RecipeSolver:
         # a 1 g error contributes 1, while a 1 mg error contributes 1e-6
         # when both are stored in grams. Macronutrients can dominate.
         #
-        # 2. IMPLEMENTED OBJECTIVE: RELATIVE SQUARED ERROR
+        # 2. TWO-SIDED SOFT TARGETS: RELATIVE SQUARED ERROR
         # -----------------------------------------------
         # Divide EACH nutrient's error by its own target before squaring:
         #
@@ -169,13 +170,46 @@ class RecipeSolver:
         # for convenience, then transpose it into CVXOPT's (f, 1) column.
         # P is symmetric; its later transpose does not change its values.
         #
-        # If no upper bound is given, m_i = 1.05*lb; otherwise m_i is the
-        # midpoint of lb and ub. These are preferences, not hard limits:
-        # this objective penalizes deviations even INSIDE the interval,
-        # and it permits shortfalls/excesses when other terms compete.
-        # A missing nutrient recorded as zero cannot be supplied by that
-        # food in the model. If an entire row is zero, its error is constant
-        # and adds no preference; a soft target does not make this infeasible.
+        # For a soft need WITH an upper bound, m_i is still the midpoint
+        # of lb and ub. This two-sided preference penalizes deviations even
+        # inside the interval; shortfalls/excesses remain possible.
+        #
+        # 4. MINIMUM-ONLY SOFT NEEDS: PENALIZE SHORTAGES, NOT EXCESS
+        # -------------------------------------------------------
+        # A minimum L_i is not an ideal intake. When ub is None we use:
+        #
+        #   max(0, (L_i - H_i x)/L_i)**2
+        #     = max(0, 1 - R_i x)**2, with R_i = H_i/L_i.
+        #
+        # A 10% shortage costs 0.01; meeting or exceeding L_i costs zero.
+        # There is no former 1.05*lb target or penalty above the minimum.
+        # The max cannot be put directly into a fixed quadratic matrix in x.
+        # Instead introduce one dimensionless shortage variable s_i:
+        #
+        #   minimize s_i**2, subject to s_i >= 0 and s_i >= 1 - R_i x.
+        #
+        # For fixed food amounts, minimizing s_i**2 selects precisely
+        # s_i = max(0, 1-R_i x), so this is the same objective, still a QP.
+        # Stack variables z = [x_0, ..., x_(f-1), s_0, ..., s_(k-1)].
+        # CVXOPT now minimizes 0.5*z.T P z + q.T z with G z <= h:
+        #
+        #   P[f+i, f+i] += 2     -> 0.5*2*s_i**2 = s_i**2
+        #   q[f+i] = 0          -> no linear or cross term is needed
+        #   [-R_i, -e_i] z <= -1 -> s_i >= 1-R_i x
+        #   [   0, -e_i] z <=  0 -> s_i >= 0.
+        #
+        # e_i selects shortage i. Existing food/hard/ratio constraints get
+        # zero columns for the shortage variables. Existing objective terms
+        # stay in the top-left food block. P remains positive semidefinite.
+        # Food quantities remain the first f entries of the returned solution;
+        # amount()/printing must never treat the appended shortages as foods.
+        #
+        # Example: H_i=[0.001], L_i=0.01. With no competing objective,
+        # all x >= 10 g have zero shortage cost, not just one exact amount.
+        # A food-use penalty can prefer smaller amounts and may trade a small
+        # shortage for less food. Missing rows give s_i=1 (constant cost),
+        # not infeasibility. A zero minimum has no shortage to penalize for
+        # nonnegative nutrient supplies, so we skip it rather than divide by 0.
         #
         # Hard bounds are expressed separately in G x <= h:
         #   food lb <= x_j <= ub:       -x_j <= -lb,    x_j <= ub
@@ -184,9 +218,6 @@ class RecipeSolver:
         # not normalized R_i. An "optimal" status certifies this mathematical
         # problem was solved, not that every soft nutrient bound was met.
         for need, (lb, ub, required, hard) in self.needs.items():
-            # if isinstance(self.provides[n], int) and self.provides[n] == 0:
-            #     logging.info(f"WARN: Food lacks {n}")
-            #     continue
             if required != NeedRequired.REQUIRED:
                 continue
 
@@ -202,9 +233,12 @@ class RecipeSolver:
                     h = np.append(h, ub)
             else:
                 if ub is None:
-                    mid = lb * 1.05
-                else:
-                    mid = (lb + ub) / 2
+                    if not np.isfinite(lb) or lb < 0:
+                        raise ValueError(f"Soft minimum for {need.name} must be nonnegative and finite")
+                    if lb > 0:
+                        shortages.append((H, lb))
+                    continue
+                mid = (lb + ub) / 2
 
                 if not np.isfinite(mid) or mid <= 0:
                     raise ValueError(f"Soft target for {need.name} must be positive and finite")
@@ -244,6 +278,24 @@ class RecipeSolver:
                 if ub > 0:
                     P[i, i] += 0.1 / ub**2
             
+        # Append shortage variables after constructing the food-only blocks.
+        count = len(shortages)
+        if count:
+            f = len(foods)
+            P = np.pad(P, ((0, count), (0, count)))
+            q = np.pad(q, ((0, 0), (0, count)))
+            G = np.pad(G, ((0, 0), (0, count)))
+            rows = np.zeros((2 * count, f + count))
+            bounds = np.zeros(2 * count)
+            for i, (H, lb) in enumerate(shortages):
+                P[f + i, f + i] = 2.
+                rows[2 * i, :f] = -H / lb
+                rows[2 * i, f + i] = -1.
+                bounds[2 * i] = -1.
+                rows[2 * i + 1, f + i] = -1.
+            G = np.vstack([G, rows])
+            h = np.append(h, bounds)
+
         G = cvxopt.matrix(G)
         h = cvxopt.matrix(h)
         P = cvxopt.matrix(P.T)

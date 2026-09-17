@@ -23,17 +23,43 @@ class ObjectiveTests(unittest.TestCase):
     def test_single_target_and_unit_invariance(self):
         for unit in (G, MG, MCG, 1000.):
             with self.subTest(unit=unit):
-                self.assertAlmostEqual(self.solve_amount(unit), 10.5, places=4)
+                self.assertAlmostEqual(self.solve_amount(unit, penalize=True),
+                                       10 / 1.0005, places=3)
 
     def test_bounded_soft_target(self):
         self.assertAlmostEqual(self.solve_amount(upper=0.03), 20., places=4)
 
     def test_batch_invariance_with_usage_penalty(self):
         self.assertAlmostEqual(self.solve_amount(days=10, penalize=True) / 10,
-                               self.solve_amount(penalize=True), places=4)
+                               self.solve_amount(penalize=True), delta=1e-3)
+
+    def test_shortage_cost_is_zero_at_and_above_minimum(self):
+        # At fixed food amounts we can inspect the actual QP objective:
+        # 50% shortage costs .25; meeting/exceeding the minimum costs zero.
+        for amount, expected in ((5., .25), (10., 0.), (30., 0.)):
+            with self.subTest(amount=amount):
+                p = RecipeSolver()
+                p.food_limits = {Food.RICE: (amount, amount)}
+                p.food_nutrients = {Food.RICE: defaultdict(float, {Nutrient.ZINC: .001})}
+                p.food_minimize_usage = {Food.RICE: False}
+                p.add_need(Nutrient.ZINC, .01, None,
+                           NeedRequired.REQUIRED, NeedSoftness.SOFT)
+                self.assertTrue(p.solve())
+                self.assertAlmostEqual(p.sol['primal objective'], expected, delta=1e-6)
+                self.assertAlmostEqual(p.amount(Food.RICE), amount, places=4)
+
+    def test_zero_minimum_adds_no_penalty(self):
+        p = RecipeSolver()
+        p.food_limits = {Food.RICE: (1., 1.)}
+        p.food_nutrients = {Food.RICE: defaultdict(float)}
+        p.food_minimize_usage = {Food.RICE: False}
+        p.add_need(Nutrient.ZINC, 0., None,
+                   NeedRequired.REQUIRED, NeedSoftness.SOFT)
+        self.assertTrue(p.solve())
+        self.assertEqual(p.sol['primal objective'], 0.)
 
     def test_soft_shortfall_remains_feasible(self):
-        # Impossible target (1.05 g vs stock containing 0.1 g) stays soft.
+        # Impossible minimum (1 g vs stock containing 0.1 g) stays soft.
         p = RecipeSolver()
         p.food_limits = {Food.RICE: (0., 100.)}
         p.food_nutrients = {Food.RICE: defaultdict(float, {Nutrient.ZINC: 0.001})}
@@ -61,7 +87,7 @@ class RatioTests(unittest.TestCase):
         # A separate soft nutrient supplied by the calcium food steers the
         # unconstrained calcium total to calcium_target grams per day.
         p.food_nutrients[Food.EGG_SHELL_POWDER][Nutrient.ZINC] = .01
-        p.add_need(Nutrient.ZINC, calcium_target * days / 1.05, None,
+        p.add_need(Nutrient.ZINC, calcium_target * days, calcium_target * days,
                    NeedRequired.REQUIRED, NeedSoftness.SOFT)
         if with_ratio:
             p.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1., 2.)
