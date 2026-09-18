@@ -3,9 +3,8 @@ from typing import Dict, Optional, Tuple
 
 from src.recipe import NeedRequired, NeedSoftness
 
-from .units import G, KCAL, MCG, MG, VITAMIN_A_IU, VITAMIN_D_IU, VITAMIN_E_IU
-
 from .nutrient import Nutrient
+from .units import KCAL, MCG, MG, VITAMIN_A_IU, VITAMIN_D_IU, VITAMIN_E_IU, G
 
 
 # FEDIAF 2025, Table III-3b (adult dogs, per 1000 kcal ME):
@@ -14,7 +13,10 @@ from .nutrient import Nutrient
 # not a complete nutritional adequacy check (food data may be incomplete). Maxima below are nutritional (N), not EU legal (L)
 # limits on a dry-matter basis; we cannot apply the latter without dry matter.
 def dog(
-    *, age: float, weight: float, active: bool,
+    *,
+    age: float,
+    weight: float,
+    active: bool,
     daily_kcal: Optional[float] = None,
 ) -> Dict[Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]]:
     """Adult maintenance estimates; weight in kg and age in years.
@@ -33,7 +35,7 @@ def dog(
     if not isfinite(weight) or weight <= 0:
         raise ValueError("weight must be a positive finite number in kg")
     if daily_kcal is None:
-        daily_kcal = (110 if active else 95) * weight ** 0.75
+        daily_kcal = (110 if active else 95) * weight**0.75
     if not isfinite(daily_kcal) or daily_kcal <= 0:
         raise ValueError("daily_kcal must be positive and finite")
     energy = daily_kcal * KCAL
@@ -166,7 +168,7 @@ def dog(
         Nutrient.VITAMIN_A: (
             minimum(1754, 1515) * VITAMIN_A_IU * mod,
             100000 * VITAMIN_A_IU * mod,
-            NeedRequired.NOT_REQUIRED,
+            NeedRequired.REQUIRED,
             NeedSoftness.SOFT,
         ),
         Nutrient.VITAMIN_B1: (
@@ -196,13 +198,13 @@ def dog(
         Nutrient.VITAMIN_E: (
             minimum(10.40, 9.00) * VITAMIN_E_IU * mod,
             None,
-            NeedRequired.NOT_REQUIRED,
+            NeedRequired.REQUIRED,
             NeedSoftness.SOFT,
         ),
         Nutrient.VITAMIN_D: (
             minimum(159, 138) * VITAMIN_D_IU * mod,
             800 * VITAMIN_D_IU * mod,
-            NeedRequired.NOT_REQUIRED,
+            NeedRequired.REQUIRED,
             NeedSoftness.SOFT,
         ),
         Nutrient.CALCIUM: (
@@ -232,7 +234,7 @@ def dog(
         Nutrient.CHOLINE: (
             minimum(474, 409) * MG * mod,
             None,
-            NeedRequired.NOT_REQUIRED,
+            NeedRequired.REQUIRED,
             NeedSoftness.SOFT,
         ),
         Nutrient.IRON: (
@@ -244,14 +246,14 @@ def dog(
         Nutrient.SELENIUM: (
             minimum(67.50, 57.50) * MCG * mod,
             None,
-            NeedRequired.NOT_REQUIRED,
+            NeedRequired.REQUIRED,
             NeedSoftness.SOFT,
         ),
         Nutrient.PHOSPHORUS: (
             minimum(1.16, 1.00) * G * mod,
             4 * G * mod,
             NeedRequired.REQUIRED,
-            NeedSoftness.HARD,
+            NeedSoftness.SOFT,
         ),
         Nutrient.SODIUM: (
             minimum(0.29, 0.25) * G * mod,
@@ -285,7 +287,7 @@ def dog(
         ),
     }
 
-    
+
 def scale(
     d: Dict[Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]],
     day: int = 1,
@@ -294,5 +296,5 @@ def scale(
         raise ValueError("day must be a positive integer")
     ret = {}
     for k, v in d.items():
-        ret[k] = (v[0] * day, v[1] * day if v[1] is not None else None, *v[2:]) 
+        ret[k] = (v[0] * day, v[1] * day if v[1] is not None else None, *v[2:])
     return ret

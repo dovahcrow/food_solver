@@ -20,7 +20,9 @@ def main():
 
 
 @main.command("refresh-foods")
-@click.argument("foods", nargs=-1, required=True, type=click.Choice([f.name for f in Food]))
+@click.argument(
+    "foods", nargs=-1, required=True, type=click.Choice([f.name for f in Food])
+)
 def refresh_foods(foods):
     """Re-fetch named foods so older caches can include newly mapped nutrients."""
     for name in foods:
@@ -31,8 +33,12 @@ def refresh_foods(foods):
 @main.command()
 @click.option("-d", "--day", type=click.IntRange(min=1), default=1)
 @click.option("--detail", required=False, type=bool, default=False)
-@click.option("--daily-kcal", type=click.FloatRange(min=0, min_open=True), default=None,
-              help="Override the adult dog daily energy estimate (kcal, before mixing).")
+@click.option(
+    "--daily-kcal",
+    type=click.FloatRange(min=0, min_open=True),
+    default=None,
+    help="Override the adult dog daily energy estimate (kcal, before mixing).",
+)
 def opt(day: int, detail: bool, daily_kcal: float | None = None):
     foods_hard = [
         # (Food.BAICAI, 925),
@@ -66,7 +72,7 @@ def opt(day: int, detail: bool, daily_kcal: float | None = None):
         # (Food.WHITE_MUSHROOM, 339),
         # (Food.WINTER_MELON, 415),
         # (Food.OYSTER, 50),
-        (Food.PORK, 1051),
+        (Food.PORK, 500),
         # (Food.PORK_FAT, 50),
         # (Food.PORK_HEART, 396),
         # (Food.PORK_INTESTINE, 50),
@@ -93,7 +99,7 @@ def opt(day: int, detail: bool, daily_kcal: float | None = None):
         (Food.RICE, 1000 * day),
         (Food.CANOLA_OIL, 5 * day),
         (Food.SALT, 2 * day),
-        (Food.EGG_SHELL_POWDER, 3 * day),
+        (Food.EGG_SHELL_POWDER, 5 * day),
         (Food.EGG, 100 * day),
         # (Food.BARF, 4 * day),
     ]
@@ -110,7 +116,7 @@ def opt(day: int, detail: bool, daily_kcal: float | None = None):
         p.add_need(nut, *need)
     # FEDIAF 2025 Table III-3b, adult maintenance: mass ratio Ca:P 1:1..2:1.
     # Dimensionless: do not scale these bounds by the batch's number of days.
-    p.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1., 2.)
+    p.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1.0, 2.0)
     optimal = p.solve()
 
     if optimal:
