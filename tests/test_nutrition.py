@@ -27,7 +27,36 @@ class ObjectiveTests(unittest.TestCase):
                                        10 / 1.0005, places=3)
 
     def test_bounded_soft_target(self):
-        self.assertAlmostEqual(self.solve_amount(upper=0.03), 20., places=4)
+        # Every amount from 10 to 30 meets the interval; no midpoint target.
+        amount = self.solve_amount(upper=0.03)
+        self.assertGreaterEqual(amount, 10. - 1e-3)
+        self.assertLessEqual(amount, 30. + 1e-3)
+
+    def test_interval_cost_uses_each_boundary_as_denominator(self):
+        # Synthetic density 0.001 g/g, with an allowed interval 10..100 mg.
+        for amount, expected in ((9., .01), (10., 0.), (20., 0.), (55., 0.),
+                                 (100., 0.), (101., .0001), (110., .01)):
+            for unit, days in ((1., 1), (1000., 1), (1., 10)):
+                with self.subTest(amount=amount, unit=unit, days=days):
+                    p = RecipeSolver()
+                    p.food_limits = {Food.RICE: (amount * days, amount * days)}
+                    p.food_nutrients = {Food.RICE: defaultdict(float, {Nutrient.ZINC: .001 * unit})}
+                    p.food_minimize_usage = {Food.RICE: False}
+                    p.add_need(Nutrient.ZINC, .01 * unit * days, .1 * unit * days,
+                               NeedRequired.REQUIRED, NeedSoftness.SOFT)
+                    self.assertTrue(p.solve())
+                    self.assertAlmostEqual(p.sol['primal objective'], expected, delta=1e-6)
+
+    def test_invalid_soft_intervals(self):
+        for lb, ub in ((-1., 2.), (2., 1.), (0., 0.), (1., float('inf')),
+                       (1., float('nan')), (float('nan'), 2.)):
+            with self.subTest(lb=lb, ub=ub), self.assertRaises(ValueError):
+                p = RecipeSolver()
+                p.food_limits = {Food.RICE: (0., 100.)}
+                p.food_nutrients = {Food.RICE: defaultdict(float)}
+                p.food_minimize_usage = {Food.RICE: False}
+                p.add_need(Nutrient.ZINC, lb, ub, NeedRequired.REQUIRED, NeedSoftness.SOFT)
+                p.solve()
 
     def test_batch_invariance_with_usage_penalty(self):
         self.assertAlmostEqual(self.solve_amount(days=10, penalize=True) / 10,
@@ -100,7 +129,12 @@ class RatioTests(unittest.TestCase):
         for target, expected in ((.5, 1.), (1.5, 1.5), (3., 2.)):
             for days in (1, 10):
                 with self.subTest(target=target, days=days):
-                    self.assertAlmostEqual(self.solve_recipe(target, days), expected, places=4)
+                    ratio = self.solve_recipe(target, days)
+                    # A soft point target is accurate only to QP tolerance;
+                    # verify hard ratio bounds independently and more tightly.
+                    self.assertAlmostEqual(ratio, expected, delta=3e-4)
+                    self.assertGreaterEqual(ratio, 1. - 1e-6)
+                    self.assertLessEqual(ratio, 2. + 1e-6)
 
     def test_absolute_bounds_alone_allow_bad_ratios(self):
         self.assertAlmostEqual(self.solve_recipe(.5, with_ratio=False), .5, places=4)

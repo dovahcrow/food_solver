@@ -73,7 +73,9 @@ class ExtendedNutrientTests(unittest.TestCase):
         p.add_need(N.METHIONINE_CYSTINE, .21, .21, NeedRequired.REQUIRED, NeedSoftness.SOFT)
         p.add_need(N.LINOLEIC_ACID, .1, None, NeedRequired.REQUIRED, NeedSoftness.SOFT)
         self.assertTrue(p.solve())
-        self.assertAlmostEqual(p.amount(0), 10.5, places=4)
+        # Auxiliary squared losses converge in objective value; with the
+        # constant missing-data cost, default QP tolerance permits ~mg error.
+        self.assertAlmostEqual(p.amount(0), 10.5, delta=.003)
         self.assertNotIn(N.LINOLEIC_ACID, p.food_nutrients[Food.RICE])
         output = io.StringIO()
         with redirect_stdout(output):
