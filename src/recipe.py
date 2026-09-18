@@ -1,13 +1,13 @@
 from enum import Enum, auto
 from typing import Dict, List, Optional, Tuple
 import numpy as np
-import cvxopt
+import cvxpy as cp
 
 from .units import MCG, MG, G
 from .food import Food, get_or_load
 from .nutrient import Nutrient, Nutrients, nutrient_value
 
-# https://cvxopt.org/userguide/coneprog.html#quadratic-programming
+# https://www.cvxpy.org/tutorial/dcp/index.html
 
 
 class NeedSoftness(Enum):
@@ -33,6 +33,8 @@ class RecipeSolver:
         self.needs = {}
         self.food_names = []
         self.food_minimize_usage = {}
+        self.problem = None
+        self.sol = {"status": "not_solved", "x": None, "primal objective": None}
         self.nutrient_ratios: Dict[Tuple[Nutrient, Nutrient], Tuple[float, float]] = {}
 
     def add_nutrient_ratio(
@@ -70,245 +72,110 @@ class RecipeSolver:
         self.needs[nut] = (lb, ub, required, hard)
 
     def solve(self) -> bool:
-        self.food_names = foods = list(self.food_limits.keys())
+        self.food_names = foods = list(self.food_limits)
+        # Clear previous results: an infeasible subsequent solve must not
+        # expose food quantities left over from an earlier successful solve.
+        self.problem = None
+        self.sol = {"status": "not_solved", "x": None, "primal objective": None}
+        if not foods:
+            raise ValueError("Add at least one food before solving")
 
-        G = np.zeros((len(foods) * 2, len(foods)))
-        h = np.zeros(len(foods) * 2)
-
-        for i, food in enumerate(foods):
+        # x[j] is grams of food j in the batch, shape (number of foods,).
+        # H[j] is nutrient mass (g), or energy (J), per gram of food j.
+        # H @ x is total supply; bounds must use the same units/batch size.
+        # Use @ for a dot product, not * (elementwise multiplication).
+        x = cp.Variable(len(foods), nonneg=True, name="food_grams")
+        constraints = []
+        penalties = []
+        for j, food in enumerate(foods):
             lb, ub = self.food_limits[food]
-            # The food should be bigger then lb, aka -food <= -lb
-            G[i, i] = -1
-            h[i] = -lb
+            if not np.isfinite(lb) or not np.isfinite(ub) or not 0 <= lb <= ub:
+                raise ValueError(f"Invalid food bounds for {food.name}")
+            constraints.extend([x[j] >= lb, x[j] <= ub])
+            if self.food_minimize_usage[food] and ub > 0:
+                # Old normalized QP diagonal: P[j,j] += 0.1/ub**2.
+                # Since a QP objective has a factor 1/2, this is 0.05*(x/ub)^2.
+                # Penalize stock fractions so scaling the batch changes no weights.
+                penalties.append(0.05 * cp.square(x[j] / ub))
 
-            # The food should be less then ub, aka food <= ub
-            G[i + len(foods), i] = 1
-            h[i + len(foods)] = ub
-
-        P = np.zeros((len(foods), len(foods)))
-        q = np.zeros((1, len(foods)))
-        violations = []  # (normalized food row, RHS) for each soft boundary
-
-        # PROBLEM AND NOTATION
-        # --------------------
-        # Choose amounts of f foods to meet nutrient needs. Throughout this
-        # derivation, vectors x and q are columns; H_i is a row vector.
+        # SOFT INTERVAL OBJECTIVE (our agreed relative boundary penalties)
+        # ----------------------------------------------------------------
+        # For supply y=H@x, lower bound L and optional upper bound U:
+        #   loss = max(0, 1-y/L)^2 + max(0, y/U-1)^2.
+        # Below L, penalize shortage relative to L. Above U, penalize excess
+        # relative to U. Inside [L,U], including endpoints, the loss is zero.
+        # E.g. L=10 mg, U=100 mg: 9 mg and 110 mg each cost 0.01.
+        # A missing upper bound means no excess penalty. For L=0 we skip the
+        # shortage term; a supplied U must be positive to avoid division by 0.
+        # This is not the historical (y/mid-1)^2 midpoint preference.
         #
-        #   x_j    = grams of food j in the entire recipe/batch
-        #   H_ij   = amount of nutrient i per gram of food j
-        #   H_i    = [H_i0, ..., H_i(f-1)], shape (1, f)
-        #   H_i x  = sum_j H_ij*x_j = total amount of nutrient i supplied
-        #   m_i    = positive target in the historical point-target objective
+        # CVXPY's cp.pos(a) means max(a,0); cp.square(cp.pos(a)) is convex:
+        # pos is convex and nonnegative, and square is increasing there.
+        # CVXPY automatically introduces auxiliary variables during canonicalization.
+        # For shortage s and excess t the equivalent explicit QP is:
+        #   minimize s^2+t^2
+        #   s>=0, s>=1-H@x/L; t>=0, t>=H@x/U-1.
+        # For z=[x,s,t], the standard 0.5*z.T@P@z + q.T@z has diagonal
+        # P[s,s]=P[t,t]=2, q=0, and linear constraints G@z<=h:
+        #   [-H/L, -1,  0] @ z <= -1
+        #   [ H/U,  0, -1] @ z <=  1
+        #   [   0, -1,  0] @ z <=  0
+        #   [   0,  0, -1] @ z <=  0.
+        # We no longer manually assemble or transpose P, q, G and h.
         #
-        # Nutrient masses use grams, energy uses joules. Supply and bounds must
-        # have matching units and cover the same number of days.
-        # Only REQUIRED + SOFT nutrients enter the nutrient objective below.
-        # REQUIRED + HARD nutrients instead become inequality constraints;
-        # NOT_REQUIRED nutrients are skipped, including their bounds.
-        #
-        # 1. ORIGINAL OBJECTIVE: ABSOLUTE SQUARED ERROR
-        # --------------------------------------------
-        # Start with: minimize sum_i (sum_j H_ij*x_j - m_i)^2.
-        # For one nutrient, expanding the square gives:
-        #
-        #   (H_i x - m_i)^2
-        #     = (H_i x)^2 - 2*m_i*H_i x + m_i^2
-        #     = x.T (H_i.T H_i) x - 2*m_i*H_i x + m_i^2.
-        #
-        # H_i.T H_i is an outer product, an (f, f) matrix whose (j, k)
-        # entry is H_ij*H_ik; it includes cross terms between foods.
-        # This absolute-error objective depends on measurement units:
-        # a 1 g error contributes 1, while a 1 mg error contributes 1e-6
-        # when both are stored in grams. Macronutrients can dominate.
-        #
-        # 2. HISTORICAL POINT TARGET: RELATIVE SQUARED ERROR
-        # -----------------------------------------------
-        # Divide EACH nutrient's error by its own target before squaring:
-        #
-        #   minimize sum_i ((H_i x - m_i) / m_i)^2
-        #          = sum_i (H_i x / m_i - 1)^2.
-        #
-        # The "1" is m_i/m_i, not an extra nutrient target. A 10% error
-        # contributes 0.01 for any nutrient, regardless of its mass/unit.
-        # This changes the relative weights: it is the original objective
-        # weighted by 1/m_i^2, NOT an equivalent algebraic rewrite of it.
-        #
-        # Define R_i = H_i/m_i (a normalized row). Expanding again:
-        #
-        #   (R_i x - 1)^2 = x.T (R_i.T R_i) x - 2*R_i x + 1.
-        #
-        # 3. MATCH THE HISTORICAL COEFFICIENTS TO CVXOPT
-        # ----------------------------------
-        # cvxopt.solvers.qp(P, q, G, h) solves:
-        #
-        #   minimize    0.5*x.T P x + q.T x
-        #   subject to  G x <= h.
-        #
-        # Its quadratic matrix is called P and its linear vector is q
-        # (lowercase). Matching the preceding expansion, each nutrient adds:
-        #
-        #   P_i =  2*R_i.T R_i =  2*H_i.T H_i / m_i^2
-        #   q_i = -2*R_i.T     = -2*H_i.T / m_i.
-        #
-        # Sum these contributions over all participating soft nutrients.
-        # The factor 2 in P cancels CVXOPT's factor 0.5. The constant +1
-        # per nutrient can be dropped because it cannot change the best x.
-        # P is positive semidefinite (a sum of outer products), so the
-        # objective is convex, though the best recipe need not be unique.
-        #
-        # For comparison, the UNNORMALIZED objective would require BOTH:
-        #   P_i = 2*H_i.T H_i,    q_i = -2*m_i*H_i.T.
-        # Do not mix these formulas: normalizing P but not q changes the
-        # target. Example: H_i=[0.001], m_i=0.0105 should select x=10.5 g
-        # in the absence of other objectives or binding constraints.
-        #
-        # 4. CURRENT OBJECTIVE: ZERO PENALTY INSIDE THE ALLOWED INTERVAL
-        # -------------------------------------------------------------
-        # A recommended minimum is not an ideal intake. Let L_i and U_i be
-        # the soft lower and upper bounds, and y_i = H_i x be the supply.
-        # We now minimize, summed over REQUIRED + SOFT nutrients:
-        #
-        #   max(0, (L_i-y_i)/L_i)**2 + max(0, (y_i-U_i)/U_i)**2.
-        #
-        # Each side uses ITS OWN boundary as denominator. Example: with
-        # L=10 mg and U=100 mg, both 9 mg (10% short) and 110 mg (10% over)
-        # cost 0.01. At 101 mg the cost is only 0.0001. Every supply inside
-        # [L,U], including either endpoint, has zero nutrient penalty.
-        # These are equal relative-deviation weights, not a health-risk model.
-        # There is no midpoint preference or former 1.05*lb target anymore.
-        #
-        # If U is None, omit the excess term. If L=0, omit the shortage term
-        # (nutrient supplies are nonnegative). Any supplied U must be finite
-        # and strictly positive, since its own value is the denominator.
-        #
-        # 5. CONVERT THE PIECEWISE LOSS INTO A CONVEX QP
-        # ---------------------------------------------
-        # The max expressions are not a single quadratic in x. Introduce
-        # nonnegative dimensionless variables s_i (shortage) and t_i (excess):
-        #
-        #   minimize s_i**2 + t_i**2
-        #   s_i >= 0,   s_i >= 1 - H_i x/L_i
-        #   t_i >= 0,   t_i >= H_i x/U_i - 1.
-        #
-        # For fixed x, minimization picks precisely the positive part of
-        # each deviation; the auxiliary formulation gives the same loss.
-        # Stack z = [food grams x, all boundary-violation variables v].
-        # CVXOPT minimizes 0.5*z.T P z + q.T z subject to G z <= h.
-        # For auxiliary variable k, e_k selects its position in v:
-        #
-        #   shortage: [-H_i/L_i, -e_k] z <= -1
-        #   excess:   [ H_i/U_i, -e_k] z <=  1
-        #   either:   [      0, -e_k] z <=  0  (nonnegative variable).
-        #
-        # Each variable contributes P[f+k,f+k]=2 and q[f+k]=0:
-        # 0.5*2*v_k**2 = v_k**2. No nutrient cross/linear terms are needed.
-        # `violations` stores each normalized food row and its RHS. After
-        # building food-only constraints, we append one column per boundary
-        # and the two rows above. All preexisting constraints receive zeros
-        # in those columns, so their meaning is unchanged.
-        #
-        # The food-use penalty stays in P's top-left food block. P is diagonal
-        # with nonnegative entries, hence positive semidefinite; every new
-        # constraint is linear. This is still a convex quadratic program.
-        # `q` is stored as a row and transposed into CVXOPT's column vector.
-        # Food amounts occupy the first f solution entries; the appended
-        # dimensionless variables must never be printed as food quantities.
-        #
-        # With no competing objectives, any feasible supply in [L,U] is
-        # equally good. Food-use penalties can trade small violations for
-        # less food. An all-missing row forces s_i=1 (constant shortage cost)
-        # and permits t_i=0, rather than making the problem infeasible.
-        # Scaling nutrient units or scaling both inventory and daily needs
-        # to a batch leaves these relative penalties unchanged.
-        #
-        # Hard bounds are expressed separately in G x <= h:
-        #   food lb <= x_j <= ub:       -x_j <= -lb,    x_j <= ub
-        #   nutrient lb <= H_i x <= ub: -H_i x <= -lb, H_i x <= ub.
-        # Omit the upper inequality when ub is None. These use RAW H_i,
-        # not normalized R_i. An "optimal" status certifies this mathematical
-        # problem was solved, not that every soft nutrient bound was met.
+        # HARD requirements remain inequalities; NOT_REQUIRED is skipped.
+        # Missing data contributes zero without inserting keys into a defaultdict.
+        # A missing soft row has constant shortage loss, not infeasibility.
         for need, (lb, ub, required, hard) in self.needs.items():
             if required != NeedRequired.REQUIRED:
                 continue
-
-            H = np.asarray([nutrient_value(self.food_nutrients[food], need)[0] for food in foods])
-
+            if not np.isfinite(lb) or lb < 0:
+                raise ValueError(f"Invalid minimum for {need.name}")
+            if ub is not None and (not np.isfinite(ub) or ub < lb):
+                raise ValueError(f"Invalid maximum for {need.name}")
+            H = np.asarray([nutrient_value(self.food_nutrients[f], need)[0] for f in foods])
+            supply = H @ x
             if hard == NeedSoftness.HARD:
-                # The nutrient should be bigger then lb, aka -has <= -lb
-                G = np.vstack([G, -H])
-                h = np.append(h, -lb)
+                # Scale each row without changing the feasible set: energy is
+                # in millions of joules while trace nutrients may be micrograms.
+                normalizer = max(lb, ub or 0., float(np.max(np.abs(H)))) or 1.
+                constraints.append(supply / normalizer >= lb / normalizer)
                 if ub is not None:
-                    # The nutrient should be less then ub
-                    G = np.vstack([G, H])
-                    h = np.append(h, ub)
+                    constraints.append(supply / normalizer <= ub / normalizer)
             else:
-                if not np.isfinite(lb) or lb < 0:
-                    raise ValueError(f"Soft minimum for {need.name} must be nonnegative and finite")
-                if ub is not None and (not np.isfinite(ub) or ub <= 0 or ub < lb):
-                    raise ValueError(f"Soft maximum for {need.name} must be positive, finite and >= minimum")
                 if lb > 0:
-                    violations.append((-H / lb, -1.))
+                    penalties.append(cp.square(cp.pos(1 - supply / lb)))
                 if ub is not None:
-                    violations.append((H / ub, 1.))
+                    if ub <= 0:
+                        raise ValueError(f"Soft maximum for {need.name} must be positive")
+                    penalties.append(cp.square(cp.pos(supply / ub - 1)))
 
         for (numerator, denominator), (lb, ub) in self.nutrient_ratios.items():
-            N = np.asarray([self.food_nutrients[f].get(numerator, 0) for f in foods])
-            D = np.asarray([self.food_nutrients[f].get(denominator, 0) for f in foods])
-            # N and D are raw nutrient mass per gram of each food, NOT the
-            # normalized objective rows above. For a positive total D @ x:
-            #
-            #   lb <= (N @ x)/(D @ x) <= ub
-            #   N @ x >= lb*(D @ x)  ->  (lb*D - N) @ x <= 0
-            #   N @ x <= ub*(D @ x)  ->  (N - ub*D) @ x <= 0
-            #
-            # Thus the ratio adds two linear rows to G x <= h, with h=0;
-            # it does not change the quadratic objective P or q.
-            # Adult dog Ca:P=1:1..2:1 gives (D-N)@x<=0, (N-2*D)@x<=0.
-            # Absolute calcium/phosphorus bounds still apply independently.
-            G = np.vstack([G, lb * D - N, N - ub * D])
-            h = np.append(h, [0., 0.])
+            N = np.asarray([nutrient_value(self.food_nutrients[f], numerator)[0] for f in foods])
+            D = np.asarray([nutrient_value(self.food_nutrients[f], denominator)[0] for f in foods])
+            # For a positive denominator total, lb <= (N@x)/(D@x) <= ub
+            # is equivalent to two LINEAR inequalities. Do not divide two
+            # CVXPY expressions: that would obscure the convex formulation.
+            # Keep the denominator's positive absolute requirement separately.
+            # Adult Ca:P 1..2 means Ca >= P and Ca <= 2*P.
+            constraints.extend([N @ x >= lb * (D @ x), N @ x <= ub * (D @ x)])
 
-        for i, food in enumerate(foods):
-            if self.food_minimize_usage[food]:
-                # Penalize the fraction of available stock, not grams squared.
-                # Scaling both inventory and needs preserves recipe proportions.
-                # Desired extra objective: 0.05*(x_i/ub)**2.
-                # Since CVXOPT uses 0.5*x.T P x, add 0.1/ub**2 to P[i, i].
-                # There is no linear contribution to q. This preference can
-                # trade off against nutrient targets. A zero upper bound
-                # already fixes the food at zero (for valid nonnegative bounds).
-                ub = self.food_limits[food][1]
-                if not np.isfinite(ub) or ub < 0:
-                    raise ValueError("minimize_usage requires a finite nonnegative upper bound")
-                if ub > 0:
-                    P[i, i] += 0.1 / ub**2
-            
-        # Append boundary-violation variables after the food-only blocks.
-        count = len(violations)
-        if count:
-            f = len(foods)
-            P = np.pad(P, ((0, count), (0, count)))
-            q = np.pad(q, ((0, 0), (0, count)))
-            G = np.pad(G, ((0, 0), (0, count)))
-            rows = np.zeros((2 * count, f + count))
-            bounds = np.zeros(2 * count)
-            for i, (row, rhs) in enumerate(violations):
-                P[f + i, f + i] = 2.
-                rows[2 * i, :f] = row
-                rows[2 * i, f + i] = -1.
-                bounds[2 * i] = rhs
-                rows[2 * i + 1, f + i] = -1.
-            G = np.vstack([G, rows])
-            h = np.append(h, bounds)
-
-        G = cvxopt.matrix(G)
-        h = cvxopt.matrix(h)
-        P = cvxopt.matrix(P.T)
-        q = cvxopt.matrix(q.T)
-
-        self.sol = cvxopt.solvers.qp(P, q, G, h, options={"show_progress": False})
-
-        return self.sol["status"] == "optimal"
+        objective = cp.Minimize(sum(penalties, cp.Constant(0.)))
+        self.problem = cp.Problem(objective, constraints)
+        # CLARABEL ships with CVXPY; no CVXOPT dependency or license is needed.
+        # Solver errors propagate, while infeasibility returns False. Do not
+        # silently accept OPTIMAL_INACCURATE as a verified optimal solution.
+        self.problem.solve(solver=cp.CLARABEL, verbose=False)
+        optimal = self.problem.status == cp.OPTIMAL
+        # Small compatibility view for existing callers. The native CVXPY
+        # result is available as problem.status / problem.value; x.value is
+        # already a food-only vector, with no auxiliary variables to strip.
+        self.sol = {
+            "status": self.problem.status,
+            "x": np.array(x.value, copy=True) if optimal else None,
+            "primal objective": self.problem.value,
+        }
+        return optimal
 
     def print_foods(self):
         print("Solution:")
@@ -321,7 +188,9 @@ class RecipeSolver:
         if isinstance(food, Food):
             food = self.food_names.index(food)
 
-        return self.sol["x"][food]
+        if self.sol["x"] is None:
+            raise RuntimeError("No optimal recipe is available; call solve() successfully first")
+        return float(self.sol["x"][food])
 
     def print_nutrition(
         self,

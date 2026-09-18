@@ -51,7 +51,19 @@ solver.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1., 2.)
 10% 不足和 10% 超量具有相同惩罚，不代表两者的健康风险相同。
 零下限省略不足项；上限必须为有限正数且不小于下限。
 硬约束和钙磷比保持不变。
-求解变量前段是食材克数，后段是无量纲不足/超量变量；打印食材时仅使用前段。
+实现使用 CVXPY 的 `cp.Variable`、`H @ x`、`cp.square(cp.pos(...))`
+直接表达这些公式。CVXPY 自动生成辅助变量并交给 CLARABEL 求解，
+无需手工拼接 P/q/G/h；`x.value` 只包含食材克数。
+`recipe.py` 中保留了标准二次规划的推导注释。
+
+依赖为 CVXPY 1.9.2+，具体版本由 `uv.lock` 固定，不再依赖 CVXOPT。
+`solver.problem.status` 和 `.value` 提供原生结果；保留 `sol['x']`、
+`sol['status']`、`sol['primal objective']` 兼容接口。
+只有 `OPTIMAL` 返回成功，不可行时返回 False；无成功结果时 `amount()`
+报错，防止取到旧配方。底层求解器异常会正常抛出。
+
+官方文档：[CVXPY 建模规则](https://www.cvxpy.org/tutorial/dcp/index.html)、
+[求解器接口](https://www.cvxpy.org/tutorial/solvers/index.html)。
 
 启用 `minimize_usage` 时增加 `0.05 * (食材克数 / 食材上限)^2`，避免原来的
 克数平方惩罚随批量大小放大。库存和需求一起乘 10 时，目标函数保持一致。
@@ -59,6 +71,7 @@ solver.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1., 2.)
 ## 使用与验证
 
 ```sh
+uv sync
 .venv/bin/python -m src opt -d 10
 .venv/bin/python -m unittest discover -s tests -v
 ```
