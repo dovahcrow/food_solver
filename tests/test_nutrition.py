@@ -63,11 +63,11 @@ class ObjectiveTests(unittest.TestCase):
                                self.solve_amount(penalize=True), delta=1e-3)
 
     def test_shortage_cost_is_zero_at_and_above_minimum(self):
-        # At fixed food amounts we can inspect the actual QP objective:
-        # 50% shortage costs .25; meeting/exceeding the minimum costs zero.
+        # Isolate the shortage-only loss by explicitly disabling the solver's
+        # default implicit upper preference.
         for amount, expected in ((5., .25), (10., 0.), (30., 0.)):
             with self.subTest(amount=amount):
-                p = RecipeSolver()
+                p = RecipeSolver(implicit_soft_upper_multiplier=None)
                 p.food_limits = {Food.RICE: (amount, amount)}
                 p.food_nutrients = {Food.RICE: defaultdict(float, {Nutrient.ZINC: .001})}
                 p.food_minimize_usage = {Food.RICE: False}

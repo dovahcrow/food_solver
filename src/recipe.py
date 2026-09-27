@@ -27,7 +27,23 @@ class RecipeSolver:
     food_names: List[Food]
     needs: Dict[Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]]
 
-    def __init__(self) -> None:
+    def __init__(self, implicit_soft_upper_multiplier: Optional[float] = 1.5) -> None:
+        """Create a recipe solver.
+
+        ``implicit_soft_upper_multiplier`` controls open-ended requirements.
+        If a required nutrient has a positive minimum ``L`` and no explicit
+        maximum, supply above ``multiplier * L`` receives the same relative
+        squared excess penalty used by an explicit soft upper bound.  It is a
+        preference, not a hard safety limit, so a constrained recipe can still
+        exceed it.  Pass ``None`` to retain a truly open-ended requirement.
+        """
+        if implicit_soft_upper_multiplier is not None and (
+            not np.isfinite(implicit_soft_upper_multiplier)
+            or implicit_soft_upper_multiplier <= 1
+        ):
+            raise ValueError(
+                "implicit_soft_upper_multiplier must be finite and greater than 1, or None"
+            )
         self.food_limits = {}
         self.food_nutrients = {}
         self.needs = {}
@@ -36,6 +52,7 @@ class RecipeSolver:
         self.problem = None
         self.sol = {"status": "not_solved", "x": None, "primal objective": None}
         self.nutrient_ratios: Dict[Tuple[Nutrient, Nutrient], Tuple[float, float]] = {}
+        self.implicit_soft_upper_multiplier = implicit_soft_upper_multiplier
 
     def add_nutrient_ratio(
         self, numerator: Nutrient, denominator: Nutrient, lb: float, ub: float,
@@ -71,6 +88,14 @@ class RecipeSolver:
 
         self.needs[nut] = (lb, ub, required, hard)
 
+    def effective_upper_bound(self, lb: float, ub: Optional[float]) -> Optional[float]:
+        """Return the explicit upper bound or the configured implicit soft one."""
+        if ub is not None:
+            return ub
+        if lb > 0 and self.implicit_soft_upper_multiplier is not None:
+            return lb * self.implicit_soft_upper_multiplier
+        return None
+
     def solve(self) -> bool:
         self.food_names = foods = list(self.food_limits)
         # Clear previous results: an infeasible subsequent solve must not
@@ -105,8 +130,13 @@ class RecipeSolver:
         # Below L, penalize shortage relative to L. Above U, penalize excess
         # relative to U. Inside [L,U], including endpoints, the loss is zero.
         # E.g. L=10 mg, U=100 mg: 9 mg and 110 mg each cost 0.01.
-        # A missing upper bound means no excess penalty. For L=0 we skip the
-        # shortage term; a supplied U must be positive to avoid division by 0.
+        # If the caller supplies no upper bound, the solver normally creates a
+        # SOFT preference U = implicit_soft_upper_multiplier * L. This keeps
+        # open-ended requirements such as protein from drifting arbitrarily far
+        # above their minimum merely because another food is useful. It remains
+        # feasible to exceed U: the objective only adds an excess penalty.
+        # Pass multiplier=None to omit this implicit preference. For L=0 we
+        # cannot derive U and skip it. An explicit U always takes precedence.
         # This is not the historical (y/mid-1)^2 midpoint preference.
         #
         # CVXPY's cp.pos(a) means max(a,0); cp.square(cp.pos(a)) is convex:
@@ -135,6 +165,7 @@ class RecipeSolver:
                 raise ValueError(f"Invalid maximum for {need.name}")
             H = np.asarray([nutrient_value(self.food_nutrients[f], need)[0] for f in foods])
             supply = H @ x
+            effective_ub = self.effective_upper_bound(lb, ub)
             if hard == NeedSoftness.HARD:
                 # Scale each row without changing the feasible set: energy is
                 # in millions of joules while trace nutrients may be micrograms.
@@ -145,10 +176,12 @@ class RecipeSolver:
             else:
                 if lb > 0:
                     penalties.append(cp.square(cp.pos(1 - supply / lb)))
-                if ub is not None:
-                    if ub <= 0:
-                        raise ValueError(f"Soft maximum for {need.name} must be positive")
-                    penalties.append(cp.square(cp.pos(supply / ub - 1)))
+            # Excess is a soft preference for both SOFT and HARD lower bounds.
+            # HARD controls feasibility; this term only ranks feasible recipes.
+            if effective_ub is not None:
+                if effective_ub <= 0:
+                    raise ValueError(f"Soft maximum for {need.name} must be positive")
+                penalties.append(cp.square(cp.pos(supply / effective_ub - 1)))
 
         for (numerator, denominator), (lb, ub) in self.nutrient_ratios.items():
             N = np.asarray([nutrient_value(self.food_nutrients[f], numerator)[0] for f in foods])
@@ -200,13 +233,13 @@ class RecipeSolver:
         day: int = 1,
         detail: bool = False,
     ):
-        print("Nutrition:")
+        print("Nutrition (per day):")
         for n in Nutrient:
             if n not in needs:
                 continue
 
-            lb, ub, required, _ = needs[n]
-            ub = ub or float("+INF")
+            lb, explicit_ub, required, _ = needs[n]
+            effective_ub = self.effective_upper_bound(lb, explicit_ub)
 
             value = 0
             comp = []
@@ -219,7 +252,9 @@ class RecipeSolver:
                     comp.append((f, self.amount(i) * nut))
                 value += self.amount(i) * nut
             lb /= day
-            ub /= day
+            display_ub = (
+                effective_ub / day if effective_ub is not None else float("+INF")
+            )
             value /= day
 
             if n == Nutrient.ENERGY:
@@ -238,13 +273,20 @@ class RecipeSolver:
 
             value /= scale
             lb /= scale
-            ub /= scale
+            display_ub /= scale
 
-            valid = lb <= value <= ub
+            below = value < lb
+            above = value > display_ub
 
             if detail:
+                # comp stores batch contributions; convert them to the same
+                # daily basis as value and the displayed requirement bounds.
                 comp_str = " = " + " + ".join(
-                    [f"{f.name} {v / scale:g} {unit}" for f, v in comp if v != 0]
+                    [
+                        f"{f.name} {v / day / scale:g} {unit}"
+                        for f, v in comp
+                        if v != 0
+                    ]
                 )
             else:
                 comp_str = ""
@@ -252,20 +294,39 @@ class RecipeSolver:
             if len(comp) != 1 or not detail:
                 comp_str += f" = {value:g} {unit}"
 
-            color = ""
+            # Required deficits are red because a minimum is missed. Excess is
+            # yellow: it may be above an explicit or implicit preferred upper
+            # bound, but soft excess alone does not make the QP infeasible.
+            # Optional/not-required nutrients use muted variants.
             if required != NeedRequired.REQUIRED:
-                if not valid:
+                if below:
                     color = BColors.LIGHT_YELLOW
+                    status = "below minimum"
+                elif above:
+                    color = BColors.YELLOW
+                    status = "above maximum"
                 else:
                     color = BColors.GRAY
-            elif not valid:
+                    status = "within range"
+            elif below:
                 color = BColors.RED
+                status = "below minimum"
+            elif above:
+                color = BColors.YELLOW
+                status = "above maximum"
             else:
                 color = BColors.LIGHT_GREEN
+                status = "within range"
 
             coverage = f"; incomplete data: {', '.join(missing)}" if missing else ""
+            upper_source = (
+                f"; implicit soft upper {self.implicit_soft_upper_multiplier:g}x"
+                if explicit_ub is None and effective_ub is not None
+                else ""
+            )
             print(
-                f"{color}  {n}{comp_str}, valid: {lb:.2f} ~ {ub:.2f} {unit}{coverage}{BColors.ENDC}"
+                f"{color}  {n}{comp_str}, {status}: "
+                f"{lb:.2f} ~ {display_ub:.2f} {unit}{upper_source}{coverage}{BColors.ENDC}"
             )
 
 

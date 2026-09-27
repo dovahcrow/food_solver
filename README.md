@@ -51,6 +51,24 @@ solver.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1., 2.)
 10% 不足和 10% 超量具有相同惩罚，不代表两者的健康风险相同。
 零下限省略不足项；上限必须为有限正数且不小于下限。
 硬约束和钙磷比保持不变。
+
+当需求只有正下限、上限为 `None` 时，`RecipeSolver` 默认增加一个隐式软上限：
+`U = 1.5 * L`。超过 U 后按 `max(0, 供给/U - 1)^2` 惩罚，包括蛋白质这类
+硬下限需求；它只影响可行方案之间的选择，不会造成无解。倍数可配置：
+
+```python
+RecipeSolver(implicit_soft_upper_multiplier=1.2)   # 更接近最低量
+RecipeSolver(implicit_soft_upper_multiplier=2.0)   # 更宽松
+RecipeSolver(implicit_soft_upper_multiplier=None)  # 关闭隐式软上限
+```
+
+显式上限始终优先。最低量为 0 时不会自动生成上限。这个倍数是配方偏好，
+不是 FEDIAF 的安全上限，也不能据此判断某营养素超过后是否有毒性。
+
+营养报告显示实际参与优化的区间，包括隐式软上限，并注明其倍数。颜色为：
+红色表示低于最低值，黄色表示高于显式或隐式上限，绿色表示位于区间内；
+NOT_REQUIRED 项使用较弱的灰色/黄色提示。黄色超量不等于毒性或硬约束失败。
+`--detail true` 的食材分项、营养总量和范围都按每天显示，即使求解的是多日批次。
 实现使用 CVXPY 的 `cp.Variable`、`H @ x`、`cp.square(cp.pos(...))`
 直接表达这些公式。CVXPY 自动生成辅助变量并交给 CLARABEL 求解，
 无需手工拼接 P/q/G/h；`x.value` 只包含食材克数。
