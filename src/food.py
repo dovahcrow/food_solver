@@ -1,3 +1,5 @@
+import os
+import sys
 from collections import defaultdict
 from enum import Enum, auto, unique
 from json import dump, load
@@ -44,7 +46,6 @@ class Food(Enum):
     KONGXINCAI = auto()
     KUIGUA = auto()
     LUOBO = auto()  # O shape, fist size
-    OKRA = auto()
     OYSTER = auto()
     PORK = auto()
     PORK_FAT = auto()
@@ -62,7 +63,6 @@ class Food(Enum):
     SHANYAO = auto()
     SHITAKE = auto()
     SOYBEAN_GREEN = auto()
-    SOYBEAN_YELLOW = auto()
     SOY_MILK = auto()
     SWEET_POTATO = auto()
     TOFU_FIRM = auto()
@@ -174,7 +174,6 @@ GETTERS = {
     Food.KONGXINCAI: chinanutri(493),
     Food.KUIGUA: chinanutri(420),
     Food.LUOBO: chinanutri(371),
-    Food.OKRA: chinanutri(416),
     Food.OYSTER: chinanutri(1112),
     Food.PUMPKIN: chinanutri(426),
     Food.PORK: chinanutri(788),
@@ -193,7 +192,6 @@ GETTERS = {
     Food.SIGUA: chinanutri(429),
     Food.SWEET_POTATO: usda(2346404),
     Food.SOYBEAN_GREEN: chinanutri(391),
-    Food.SOYBEAN_YELLOW: chinanutri(326),
     Food.SOY_MILK: usda(1999630),
     Food.SHITAKE: chinanutri(584),
     Food.TOMATO: chinanutri(405),
@@ -208,6 +206,16 @@ GETTERS = {
 }
 
 
+def foods_dir() -> Path:
+    """Directory holding the cached food JSON files.
+
+    ``FOODS_DIR`` overrides the default relative ``foods`` folder so an
+    external caller such as the MCP server can run from any working
+    directory.
+    """
+    return Path(os.environ.get("FOODS_DIR") or "foods")
+
+
 def get_or_load(food: Food, *, refresh: bool = False) -> Nutrients:
     getter = GETTERS[food]
     if isinstance(getter, dict):
@@ -217,12 +225,13 @@ def get_or_load(food: Food, *, refresh: bool = False) -> Nutrients:
     else:
         raise NotImplementedError
 
-    Path("foods").mkdir(parents=True, exist_ok=True)
+    directory = foods_dir()
+    directory.mkdir(parents=True, exist_ok=True)
 
     try:
         if refresh:
             raise FileNotFoundError
-        with open(f"foods/{food.name}.json") as f:
+        with open(directory / f"{food.name}.json") as f:
             serde = load(f)
             nuts = defaultdict(
                 int, {Nutrient[k]: v for k, v in serde.items() if k != "__name__"}
@@ -231,10 +240,10 @@ def get_or_load(food: Food, *, refresh: bool = False) -> Nutrients:
     except FileNotFoundError:
         pass
 
-    print(f"Getting nutrients for {food.name}")
+    print(f"Getting nutrients for {food.name}", file=sys.stderr)
     name, nuts = getter()
 
-    with open(f"foods/{food.name}.json", "w+") as f:
+    with open(directory / f"{food.name}.json", "w+") as f:
         dump(
             {"__name__": name, **{k.name: v for k, v in nuts.items()}},
             f,

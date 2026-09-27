@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Dict, List, Optional, Tuple
 import numpy as np
@@ -18,6 +19,33 @@ class NeedSoftness(Enum):
 class NeedRequired(Enum):
     REQUIRED = auto()
     NOT_REQUIRED = auto()
+
+
+@dataclass
+class NutrientReport:
+    """One nutrient line of the daily report, shared by the CLI and MCP tools.
+
+    ``value``, ``minimum`` and ``maximum`` are already divided by the batch
+    day count and expressed in ``unit``; ``scale`` converts them back to the
+    solver's base unit (g, or J for energy; ``inf`` maximum means no upper
+    bound). ``components`` holds per-food daily contributions in ``unit`` and
+    is only populated for detailed reports.
+    """
+
+    nutrient: Nutrient
+    required: "NeedRequired"
+    status: str
+    color: str
+    unit: str
+    scale: float
+    value: float
+    minimum: float
+    maximum: float
+    implicit_upper: bool
+    implicit_multiplier: float = 1.5
+    missing: List[str] = field(default_factory=list)
+    components: List[Tuple[str, float]] = field(default_factory=list)
+    has_single_component: bool = False
 
 
 class RecipeSolver:
@@ -225,15 +253,28 @@ class RecipeSolver:
             raise RuntimeError("No optimal recipe is available; call solve() successfully first")
         return float(self.sol["x"][food])
 
-    def print_nutrition(
+    @property
+    def foods(self) -> Dict[Food, float]:
+        """Grams of every food in the solved batch; empty before a successful solve."""
+        if self.sol["x"] is None:
+            return {}
+        return {f: float(self.sol["x"][i]) for i, f in enumerate(self.food_names)}
+
+    def nutrition_report(
         self,
         needs: Dict[
             Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]
         ],
         day: int = 1,
         detail: bool = False,
-    ):
-        print("Nutrition (per day):")
+    ) -> List["NutrientReport"]:
+        """Structured daily nutrition, one entry per requirement in ``needs``.
+
+        Values are in the entry's display unit (``unit``); multiply by ``scale``
+        for the solver's base unit (grams, or joules for energy). The CLI report
+        and the MCP tool both render from this single computation.
+        """
+        reports = []
         for n in Nutrient:
             if n not in needs:
                 continue
@@ -281,23 +322,12 @@ class RecipeSolver:
             if detail:
                 # comp stores batch contributions; convert them to the same
                 # daily basis as value and the displayed requirement bounds.
-                comp_str = " = " + " + ".join(
-                    [
-                        f"{f.name} {v / day / scale:g} {unit}"
-                        for f, v in comp
-                        if v != 0
-                    ]
-                )
+                components = [
+                    (f.name, v / day / scale) for f, v in comp if v != 0
+                ]
             else:
-                comp_str = ""
+                components = []
 
-            if len(comp) != 1 or not detail:
-                comp_str += f" = {value:g} {unit}"
-
-            # Required deficits are red because a minimum is missed. Excess is
-            # yellow: it may be above an explicit or implicit preferred upper
-            # bound, but soft excess alone does not make the QP infeasible.
-            # Optional/not-required nutrients use muted variants.
             if required != NeedRequired.REQUIRED:
                 if below:
                     color = BColors.LIGHT_YELLOW
@@ -318,16 +348,43 @@ class RecipeSolver:
                 color = BColors.LIGHT_GREEN
                 status = "within range"
 
-            coverage = f"; incomplete data: {', '.join(missing)}" if missing else ""
-            upper_source = (
-                f"; implicit soft upper {self.implicit_soft_upper_multiplier:g}x"
-                if explicit_ub is None and effective_ub is not None
-                else ""
+            reports.append(
+                NutrientReport(
+                    nutrient=n,
+                    required=required,
+                    status=status,
+                    color=color,
+                    unit=unit,
+                    scale=scale,
+                    value=value,
+                    minimum=lb,
+                    maximum=display_ub,
+                    implicit_upper=explicit_ub is None and effective_ub is not None,
+                    implicit_multiplier=(
+                        self.implicit_soft_upper_multiplier
+                        if self.implicit_soft_upper_multiplier is not None
+                        else 1.5
+                    ),
+                    missing=missing,
+                    components=components,
+                    has_single_component=len(comp) == 1,
+                )
             )
-            print(
-                f"{color}  {n}{comp_str}, {status}: "
-                f"{lb:.2f} ~ {display_ub:.2f} {unit}{upper_source}{coverage}{BColors.ENDC}"
-            )
+        return reports
+
+    def print_nutrition(
+        self,
+        needs: Dict[
+            Nutrient, Tuple[float, Optional[float], NeedRequired, NeedSoftness]
+        ],
+        day: int = 1,
+        detail: bool = False,
+    ):
+        from . import report as report_renderer
+
+        print("Nutrition (per day):")
+        for r in self.nutrition_report(needs, day, detail):
+            print(report_renderer.format_nutrient_line(r, detail))
 
 
 class BColors:

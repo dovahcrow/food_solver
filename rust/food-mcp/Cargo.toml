@@ -1,0 +1,18 @@
+[package]
+name = "food-mcp"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "food-mcp"
+path = "src/main.rs"
+
+[dependencies]
+food-core = { path = "../food-core" }
+rmcp = { workspace = true }
+tokio = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+culpa = { workspace = true }

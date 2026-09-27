@@ -1,0 +1,14 @@
+[package]
+name = "food-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "food"
+path = "src/main.rs"
+
+[dependencies]
+food-core = { path = "../food-core" }
+clap = { workspace = true }
+anyhow = { workspace = true }
+culpa = { workspace = true }

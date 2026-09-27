@@ -1,0 +1,520 @@
+//! The convex batch solver and its structured nutrition report.
+//!
+//! This mirrors the Python reference formulation: a quadratic program with
+//! relative-boundary squared losses, solved by [Clarabel] — the same
+//! interior-point solver CVXPY used.
+//!
+//! For a nutrient supply `y = H @ x`, minimum `L` and optional maximum `U`:
+//!
+//! ```text
+//! loss = max(0, 1 - y/L)^2 + max(0, y/U - 1)^2
+//! ```
+//!
+//! Below `L` the shortage is penalised relative to `L`; above `U` the excess
+//! is penalised relative to `U`; inside `[L, U]` the loss is zero. With no
+//! explicit `U`, an open-ended requirement gets a soft preference
+//! `U = multiplier * L`, so protein-like minima do not drift arbitrarily high.
+//! That preference only ranks feasible recipes; it never makes one infeasible.
+//!
+//! [Clarabel]: https://github.com/oxfordcontrol/Clarabel.rs
+
+use clarabel::algebra::CscMatrix;
+use clarabel::solver::{DefaultSettings, DefaultSolver, IPSolver, NonnegativeConeT, SolverStatus};
+
+use anyhow::{anyhow, Error};
+use culpa::{throw, throws};
+
+use crate::foods::Food;
+use crate::nutrient::{nutrient_value, Nutrient};
+use crate::units::{G, MCG, MG};
+
+/// Whether a nutrient must be satisfied, or is only reported.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NeedRequired {
+    Required,
+    NotRequired,
+}
+
+/// Whether a requirement bounds feasibility or only ranks solutions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NeedSoftness {
+    Soft,
+    Hard,
+}
+
+/// One requirement: minimum, optional explicit maximum, and its kind.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Requirement {
+    pub minimum: f64,
+    pub maximum: Option<f64>,
+    pub required: NeedRequired,
+    pub softness: NeedSoftness,
+}
+
+/// One ingredient of the batch and its per-gram composition.
+#[derive(Debug, Clone)]
+pub struct FoodRow {
+    pub name: &'static str,
+    pub values: Food,
+    /// Use exactly `lower` grams when `lower == upper`, otherwise any amount
+    /// in `[lower, upper]`.
+    pub lower: f64,
+    pub upper: f64,
+    /// Prefer less of this ingredient among otherwise equivalent recipes.
+    pub minimize_usage: bool,
+}
+
+/// A nutrient mass ratio that must stay within `[minimum, maximum]`.
+#[derive(Debug, Clone, Copy)]
+pub struct RatioConstraint {
+    pub numerator: Nutrient,
+    pub denominator: Nutrient,
+    pub minimum: f64,
+    pub maximum: f64,
+}
+
+/// Solver inputs.
+#[derive(Debug, Clone)]
+pub struct Problem {
+    pub foods: Vec<FoodRow>,
+    pub needs: Vec<(Nutrient, Requirement)>,
+    pub ratios: Vec<RatioConstraint>,
+    /// `Some(m)` gives open-ended minima a soft maximum of `m * L`; `None`
+    /// leaves them genuinely open-ended.
+    pub implicit_soft_upper_multiplier: Option<f64>,
+}
+
+impl Problem {
+    /// The explicit maximum, or the configured implicit soft one.
+    pub fn effective_upper_bound(&self, minimum: f64, maximum: Option<f64>) -> Option<f64> {
+        if maximum.is_some() {
+            return maximum;
+        }
+        match self.implicit_soft_upper_multiplier {
+            Some(multiplier) if minimum > 0.0 => Some(minimum * multiplier),
+            _ => None,
+        }
+    }
+}
+
+/// Solver termination, collapsed to what the frontends care about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SolveStatus {
+    Optimal,
+    Infeasible,
+    /// Any other termination, carrying Clarabel's status text.
+    Other(String),
+}
+
+impl SolveStatus {
+    pub fn as_str(&self) -> &str {
+        match self {
+            SolveStatus::Optimal => "optimal",
+            SolveStatus::Infeasible => "infeasible",
+            SolveStatus::Other(text) => text,
+        }
+    }
+}
+
+/// Outcome of a solve.
+#[derive(Debug, Clone)]
+pub struct Solution {
+    pub status: SolveStatus,
+    /// Batch grams per food, in `Problem::foods` order; only for an optimal
+    /// solve.
+    pub grams: Option<Vec<f64>>,
+    pub objective: Option<f64>,
+}
+
+impl Solution {
+    pub fn is_optimal(&self) -> bool {
+        matches!(self.status, SolveStatus::Optimal)
+    }
+}
+
+/// One row of `A z <= b`.
+struct Row {
+    terms: Vec<(usize, f64)>,
+    bound: f64,
+}
+
+impl Row {
+    fn new() -> Self {
+        Self {
+            terms: Vec::new(),
+            bound: 0.0,
+        }
+    }
+
+    fn push(&mut self, column: usize, value: f64) {
+        if value != 0.0 {
+            self.terms.push((column, value));
+        }
+    }
+}
+
+fn csc_from_rows(nrows: usize, ncols: usize, rows: &[Row]) -> CscMatrix<f64> {
+    let mut col_counts = vec![0usize; ncols];
+    for row in rows {
+        for (col, _) in &row.terms {
+            col_counts[*col] += 1;
+        }
+    }
+    let mut colptr = vec![0usize; ncols + 1];
+    for col in 0..ncols {
+        colptr[col + 1] = colptr[col] + col_counts[col];
+    }
+    let mut cursor = colptr.clone();
+    let rowval = vec![0usize; rows.iter().map(|r| r.terms.len()).sum()];
+    let mut rowval = rowval;
+    let mut nzval = vec![0.0; rowval.len()];
+    for (index, row) in rows.iter().enumerate() {
+        for (col, value) in &row.terms {
+            let slot = cursor[*col];
+            rowval[slot] = index;
+            nzval[slot] = *value;
+            cursor[*col] += 1;
+        }
+    }
+    CscMatrix::new(nrows, ncols, colptr, rowval, nzval)
+}
+
+/// Solve the batch problem.
+#[throws(Error)]
+pub fn solve(problem: &Problem) -> Solution {
+    let foods = &problem.foods;
+    let n = foods.len();
+    if n == 0 {
+        throw!(anyhow!("Add at least one food before solving"));
+    }
+    for food in foods {
+        if !food.lower.is_finite()
+            || !food.upper.is_finite()
+            || food.lower < 0.0
+            || food.upper < food.lower
+        {
+            throw!(anyhow!("Invalid food bounds for {}", food.name));
+        }
+    }
+
+    // Use nutrient_value, not a raw lookup: combined targets (methionine +
+    // cystine, phenylalanine + tyrosine, EPA + DHA) are sums of their parts,
+    // and vitamin B5 falls back to the legacy pantothenic-acid row.
+    let value_of = |values: &Food, nutrient: Nutrient| -> f64 {
+        nutrient_value(values, nutrient).0.unwrap_or(0.0)
+    };
+
+    let mut rows: Vec<Row> = Vec::new();
+    // Diagonal of P, one entry per variable (foods then auxiliaries).
+    let mut p_diagonal: Vec<f64> = vec![0.0; n];
+    // Auxiliary variables appended after the food variables.
+    let mut aux_index = n;
+
+    // Ingredient bounds and the stock-fraction preference.
+    for (index, food) in foods.iter().enumerate() {
+        // The Python reference declares x non-negative and adds x >= lower, so
+        // an optional ingredient (lower == 0) still needs the x >= 0 row:
+        // Clarabel variables are free unless constrained.
+        let mut lower_row = Row::new();
+        lower_row.push(index, -1.0);
+        lower_row.bound = -food.lower;
+        rows.push(lower_row);
+
+        let mut upper_row = Row::new();
+        upper_row.push(index, 1.0);
+        upper_row.bound = food.upper;
+        rows.push(upper_row);
+
+        if food.minimize_usage && food.upper > 0.0 {
+            // 0.05 * (x / ub)^2 = 0.5 * P * x^2  =>  P = 0.1 / ub^2.
+            p_diagonal[index] += 0.1 / (food.upper * food.upper);
+        }
+    }
+
+    for (nutrient, requirement) in &problem.needs {
+        if requirement.required != NeedRequired::Required {
+            continue;
+        }
+        if !requirement.minimum.is_finite() || requirement.minimum < 0.0 {
+            throw!(anyhow!("Invalid minimum for {}", nutrient.name()));
+        }
+        if let Some(maximum) = requirement.maximum {
+            if !maximum.is_finite() || maximum < requirement.minimum {
+                throw!(anyhow!("Invalid maximum for {}", nutrient.name()));
+            }
+        }
+
+        let column: Vec<f64> = foods
+            .iter()
+            .map(|food| value_of(&food.values, *nutrient))
+            .collect();
+        let effective_upper =
+            problem.effective_upper_bound(requirement.minimum, requirement.maximum);
+
+        if requirement.softness == NeedSoftness::Hard {
+            // Scale each row without changing the feasible set: energy is in
+            // millions of joules while trace nutrients may be micrograms.
+            let largest = column.iter().fold(0.0_f64, |acc, v| acc.max(v.abs()));
+            let normalizer = requirement
+                .minimum
+                .max(requirement.maximum.unwrap_or(0.0))
+                .max(largest);
+            let normalizer = if normalizer == 0.0 { 1.0 } else { normalizer };
+
+            let mut row = Row::new();
+            for (index, value) in column.iter().enumerate() {
+                row.push(index, -value / normalizer);
+            }
+            row.bound = -requirement.minimum / normalizer;
+            rows.push(row);
+
+            if let Some(maximum) = requirement.maximum {
+                let mut row = Row::new();
+                for (index, value) in column.iter().enumerate() {
+                    row.push(index, value / normalizer);
+                }
+                row.bound = maximum / normalizer;
+                rows.push(row);
+            }
+        } else if requirement.minimum > 0.0 {
+            // s >= 1 - H@x/L  =>  -H/L @ x - s <= -1.
+            let mut row = Row::new();
+            for (index, value) in column.iter().enumerate() {
+                row.push(index, -value / requirement.minimum);
+            }
+            row.push(aux_index, -1.0);
+            row.bound = -1.0;
+            rows.push(row);
+            p_diagonal.push(2.0);
+            aux_index += 1;
+        }
+
+        // Excess is a soft preference for both SOFT and HARD lower bounds.
+        if let Some(upper) = effective_upper {
+            if upper <= 0.0 {
+                throw!(anyhow!(
+                    "Soft maximum for {} must be positive",
+                    nutrient.name()
+                ));
+            }
+            // t >= H@x/U - 1  =>  H/U @ x - t <= 1.
+            let mut row = Row::new();
+            for (index, value) in column.iter().enumerate() {
+                row.push(index, value / upper);
+            }
+            row.push(aux_index, -1.0);
+            row.bound = 1.0;
+            rows.push(row);
+            p_diagonal.push(2.0);
+            aux_index += 1;
+        }
+    }
+
+    for ratio in &problem.ratios {
+        let numerator: Vec<f64> = foods
+            .iter()
+            .map(|food| value_of(&food.values, ratio.numerator))
+            .collect();
+        let denominator: Vec<f64> = foods
+            .iter()
+            .map(|food| value_of(&food.values, ratio.denominator))
+            .collect();
+        // minimum <= (N@x)/(D@x) <= maximum becomes two linear inequalities.
+        // The denominator keeps its own positive absolute requirement, so it
+        // cannot be zero. Ratio bounds are dimensionless: never scaled by days.
+        let mut lower_row = Row::new();
+        let mut upper_row = Row::new();
+        for index in 0..n {
+            lower_row.push(
+                index,
+                -(numerator[index] - ratio.minimum * denominator[index]),
+            );
+            upper_row.push(index, numerator[index] - ratio.maximum * denominator[index]);
+        }
+        rows.push(lower_row);
+        rows.push(upper_row);
+    }
+
+    let total = aux_index;
+    let a = csc_from_rows(rows.len(), total, &rows);
+    let b: Vec<f64> = rows.iter().map(|row| row.bound).collect();
+
+    // P is diagonal: 2 per squared auxiliary, plus the ingredient preferences.
+    let mut p_rows: Vec<Row> = (0..total).map(|_| Row::new()).collect();
+    for (index, weight) in p_diagonal.iter().enumerate() {
+        p_rows[index].push(index, *weight);
+    }
+    let p = csc_from_rows(total, total, &p_rows);
+
+    let q = vec![0.0; total];
+    let cones = [NonnegativeConeT(rows.len())];
+    // Clarabel prints its banner and iteration table to stdout by default,
+    // which would corrupt both the CLI report and the MCP stdio protocol.
+    let settings = DefaultSettings {
+        verbose: false,
+        ..DefaultSettings::default()
+    };
+    let mut solver = DefaultSolver::new(&p, &q, &a, &b, &cones, settings)
+        .map_err(|error| anyhow!("failed to build the solver: {error}"))?;
+    solver.solve();
+
+    let status = match solver.solution.status {
+        SolverStatus::Solved => SolveStatus::Optimal,
+        SolverStatus::PrimalInfeasible | SolverStatus::AlmostPrimalInfeasible => {
+            SolveStatus::Infeasible
+        }
+        other => SolveStatus::Other(format!("{other:?}")),
+    };
+    let optimal = status == SolveStatus::Optimal;
+    Solution {
+        grams: if optimal {
+            Some(solver.solution.x[..n].to_vec())
+        } else {
+            None
+        },
+        objective: if optimal {
+            Some(solver.solution.obj_val)
+        } else {
+            None
+        },
+        status,
+    }
+}
+
+/// One food's contribution to a nutrient, in display units.
+#[derive(Debug, Clone)]
+pub struct Component {
+    pub food: &'static str,
+    pub amount: f64,
+}
+
+/// One nutrient line of the daily report, shared by both frontends.
+///
+/// `value`, `minimum` and `maximum` are already divided by the batch day count
+/// and expressed in `unit`; `scale` converts them back to the solver's base
+/// unit. `maximum` is `None` when the requirement is open-ended; `implicit`
+/// marks a soft preference above an open-ended minimum (a preference, not a
+/// toxicity limit).
+#[derive(Debug, Clone)]
+pub struct NutrientReport {
+    pub nutrient: Nutrient,
+    pub required: NeedRequired,
+    pub status: ReportStatus,
+    pub unit: &'static str,
+    pub scale: f64,
+    pub value: f64,
+    pub minimum: f64,
+    pub maximum: Option<f64>,
+    pub implicit_upper: bool,
+    pub implicit_multiplier: Option<f64>,
+    pub missing: Vec<&'static str>,
+    pub components: Vec<Component>,
+}
+
+/// Where the supply sits relative to its requirement interval.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReportStatus {
+    BelowMinimum,
+    WithinRange,
+    AboveMaximum,
+}
+
+impl ReportStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ReportStatus::BelowMinimum => "below minimum",
+            ReportStatus::WithinRange => "within range",
+            ReportStatus::AboveMaximum => "above maximum",
+        }
+    }
+}
+
+/// Build the daily report for a solved problem.
+///
+/// `needs` is the scaled requirement table used for the solve; `grams` are the
+/// solved batch weights. Values are per day, so the whole batch is divided by
+/// `days`.
+pub fn nutrition_report(
+    problem: &Problem,
+    needs: &[(Nutrient, Requirement)],
+    grams: &[f64],
+    days: u32,
+    detail: bool,
+) -> Vec<NutrientReport> {
+    let day = days as f64;
+    let mut reports = Vec::new();
+
+    for nutrient in Nutrient::all() {
+        let Some((_, requirement)) = needs.iter().find(|(n, _)| n == nutrient) else {
+            continue;
+        };
+        let effective_upper =
+            problem.effective_upper_bound(requirement.minimum, requirement.maximum);
+
+        let mut total = 0.0;
+        let mut components = Vec::new();
+        let mut missing = Vec::new();
+        for (index, food) in problem.foods.iter().enumerate() {
+            let (value, known) = nutrient_value(&food.values, *nutrient);
+            let contribution = value.unwrap_or(0.0) * grams[index];
+            if !known && grams[index] > 1e-6 {
+                // Report incompleteness only for foods actually in the recipe.
+                missing.push(food.name);
+            }
+            if contribution != 0.0 && detail {
+                components.push(Component {
+                    food: food.name,
+                    amount: contribution / day,
+                });
+            }
+            total += contribution;
+        }
+
+        let minimum = requirement.minimum / day;
+        let maximum = effective_upper.map(|value| value / day);
+        let value = total / day;
+
+        let (unit, scale) = if *nutrient == Nutrient::Energy {
+            ("kJ", 1000.0)
+        } else if minimum >= G {
+            ("g", G)
+        } else if minimum >= MG {
+            ("mg", MG)
+        } else {
+            ("μg", MCG)
+        };
+
+        let value = value / scale;
+        let minimum = minimum / scale;
+        let maximum = maximum.map(|value| value / scale);
+
+        let status = if value < minimum {
+            ReportStatus::BelowMinimum
+        } else if maximum.is_some_and(|bound| value > bound) {
+            ReportStatus::AboveMaximum
+        } else {
+            ReportStatus::WithinRange
+        };
+
+        // Scale the per-food daily contributions into the display unit too.
+        for component in &mut components {
+            component.amount /= scale;
+        }
+
+        reports.push(NutrientReport {
+            nutrient: *nutrient,
+            required: requirement.required,
+            status,
+            unit,
+            scale,
+            value,
+            minimum,
+            maximum,
+            implicit_upper: requirement.maximum.is_none() && effective_upper.is_some(),
+            implicit_multiplier: problem.implicit_soft_upper_multiplier,
+            missing,
+            components,
+        });
+    }
+    reports
+}

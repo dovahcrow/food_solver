@@ -1,0 +1,14 @@
+[package]
+name = "food-core"
+version.workspace = true
+edition.workspace = true
+
+[build-dependencies]
+# `float_roundtrip` keeps serde_json from drifting a ULP off the cached values.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+
+[dependencies]
+anyhow = { workspace = true }
+culpa = { workspace = true }
+serde = { workspace = true }
+clarabel = { workspace = true }

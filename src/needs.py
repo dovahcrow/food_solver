@@ -1,7 +1,7 @@
 from math import isfinite
 from typing import Dict, Optional, Tuple
 
-from src.recipe import NeedRequired, NeedSoftness
+from .recipe import NeedRequired, NeedSoftness
 
 from .nutrient import Nutrient
 from .units import KCAL, MCG, MG, VITAMIN_A_IU, VITAMIN_D_IU, VITAMIN_E_IU, G

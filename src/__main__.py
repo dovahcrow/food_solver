@@ -1,11 +1,23 @@
+"""Command-line frontend for the food solver.
+
+The planning logic lives in :mod:`src.planner`; this module only parses
+arguments and renders the result.
+"""
+
 import logging
 
 import click
 
-from .food import Food, get_or_load
-from .needs import dog, scale
-from .nutrient import Nutrient
-from .recipe import RecipeSolver
+from . import report
+from .food import Food
+from .planner import (
+    IngredientSpec,
+    PlanRequest,
+    PlannerError,
+    Profile,
+    plan,
+    resolve_food,
+)
 
 logging.basicConfig(
     format="[%(asctime)s %(name)s %(levelname)s] %(message)s",
@@ -14,9 +26,45 @@ logging.basicConfig(
 )
 
 
+def parse_ingredient(value: str) -> IngredientSpec:
+    """Parse ``FOOD:GRAMS`` or ``FOOD:GRAMS:optional`` into a spec.
+
+    The upper bound is the batch weight; an optional ingredient may also be
+    left out entirely, and ``minimize_usage`` prefers less of it.
+    """
+    parts = value.split(":")
+    if len(parts) not in (2, 3):
+        raise click.BadParameter(
+            f"{value!r} must be FOOD:GRAMS or FOOD:GRAMS:optional"
+        )
+    try:
+        food = resolve_food(parts[0])
+    except PlannerError as error:
+        raise click.BadParameter(str(error)) from None
+    try:
+        grams = float(parts[1])
+    except ValueError:
+        raise click.BadParameter(f"{parts[1]!r} is not a number of grams") from None
+    if grams < 0:
+        raise click.BadParameter("grams must not be negative")
+    optional = len(parts) == 3 and parts[2].lower() in ("1", "true", "yes", "optional")
+    if len(parts) == 3 and not optional and parts[2].lower() not in ("0", "false", "no"):
+        raise click.BadParameter(f"{parts[2]!r} is not a boolean flag")
+    if optional:
+        return IngredientSpec.optional_upto(food, grams)
+    return IngredientSpec.fixed(food, grams)
+
+
 @click.group()
 def main():
     pass
+
+
+@main.command("foods")
+def foods_command():
+    """List every food the solver knows."""
+    for food in Food:
+        click.echo(food.name)
 
 
 @main.command("refresh-foods")
@@ -25,6 +73,8 @@ def main():
 )
 def refresh_foods(foods):
     """Re-fetch named foods so older caches can include newly mapped nutrients."""
+    from .food import get_or_load
+
     for name in foods:
         get_or_load(Food[name], refresh=True)
         click.echo(f"Refreshed {name}")
@@ -39,91 +89,67 @@ def refresh_foods(foods):
     default=None,
     help="Override the adult dog daily energy estimate (kcal, before mixing).",
 )
-def opt(day: int, detail: bool, daily_kcal: float | None = None):
-    foods_hard = [
-        # (Food.BAICAI, 925),
-        # (Food.JUANXINCAI, 661),
-        # (Food.BANANA, 50),
-        # (Food.BEEF, 635),
-        # (Food.BASA_FISH, 484),
-        # (Food.BEEN_SPROUT, 497),
-        # (Food.BELL_PEPER, 427),
-        # (Food.BOCAI, 253),
-        # (Food.BOKCHOY, 60),
-        # (Food.BROCCOLI, 933),
-        # (Food.CABBAGE, 1006),
-        # (Food.CARROT, 1147),
+@click.option("--weight", type=click.FloatRange(min=0, min_open=True), default=7.0,
+              help="Dog body weight in kg.")
+@click.option("--age", type=click.FloatRange(min=1), default=3.0,
+              help="Dog age in years; only adult maintenance is supported.")
+@click.option("--active/--no-active", default=False,
+              help="Select the 110 kcal/kg^0.75 profile instead of 95.")
+@click.option(
+    "-i", "--ingredient", "ingredients", multiple=True,
+    metavar="FOOD:GRAMS[:optional]",
+    help="Add an ingredient. A fixed weight must be used exactly; an optional "
+         "one may be any amount up to GRAMS. Repeat for every ingredient.",
+)
+def opt(day, detail, daily_kcal, weight, age, active, ingredients):
+    """Solve a batch from the ingredients given with --ingredient.
+
+    With no --ingredient the CLI reproduces the historical CELERY, JIANGDOU,
+    PORK, RICE, CANOLA_OIL, SALT, EGG_SHELL_POWDER and EGG batch.
+    """
+    if ingredients:
+        specs = [parse_ingredient(value) for value in ingredients]
+    else:
+        specs = default_ingredients(day)
+
+    request = PlanRequest(
+        ingredients=specs,
+        days=day,
+        profile=Profile(age=age, weight=weight, active=active, daily_kcal=daily_kcal),
+        detail=detail,
+    )
+    try:
+        result = plan(request)
+    except PlannerError as error:
+        raise click.ClickException(str(error)) from None
+
+    if not result.optimal:
+        click.echo("Solution not found")
+        return
+    # color=True keeps the report's ANSI codes even when piped, matching the
+    # historical plain-print output.
+    for line in report.format_recipe(result) + report.format_nutrition(result, detail):
+        click.echo(line, color=True)
+
+
+def default_ingredients(day: int) -> list[IngredientSpec]:
+    """The reference batch used before the CLI accepted explicit ingredients."""
+    fixed = [
         (Food.CELERY, 245),
-        # (Food.CHICKEN_BREAST, 665),
-        # (Food.CHICKEN_HEART, 37),
-        # (Food.CHICKEN_LIVER, 424),
-        # (Food.CHICKEN_GIZZARD, 278),
-        # (Food.CHICKEN_THIGH, 60),
-        # (Food.CHINESE_LETTUS, 50),
-        # (Food.CUCUMBER, 854),
-        # (Food.EGG, 100),
-        # (Food.EGGPLANT, 601),
-        # (Food.FUGUA, 1438),
-        # (Food.LUOBO, 863),
         (Food.JIANGDOU, 411),
-        # (Food.JIEGUA, 664),
-        # (Food.KUIGUA, 824),
-        # (Food.KONGXINCAI, 439),
-        # (Food.WHITE_MUSHROOM, 339),
-        # (Food.WINTER_MELON, 415),
-        # (Food.OYSTER, 50),
         (Food.PORK, 500),
-        # (Food.PORK_FAT, 50),
-        # (Food.PORK_HEART, 396),
-        # (Food.PORK_INTESTINE, 50),
-        # (Food.PORK_LIVER, 275),
-        # (Food.PORK_TONGUE, 50),
-        # (Food.POTATO, 1787),
-        # (Food.PUMPKIN, 1182),
-        # (Food.QINCAI, 315),
-        # (Food.SIJIDOU, 308),
-        # (Food.SIGUA, 650),
-        # (Food.SHANYAO, 600),
-        # (Food.SHITAKE, 222),
-        # (Food.SOYBEAN_GREEN, 203),
-        # (Food.SWEET_POTATO, 1486),
-        # (Food.TOFU_FIRM, 467),
-        # (Food.TOFU_SOFT, 660),
-        # (Food.TOMATO, 1363),
-        # (Food.DUCK_GIZZARD, 568),
-        # (Food.ZIGANLAN, 719),
-        # (Food.ZUCCHINI, 575),
-        #
     ]
-    foods_opts = [
+    optional = [
         (Food.RICE, 1000 * day),
         (Food.CANOLA_OIL, 5 * day),
         (Food.SALT, 2 * day),
         (Food.EGG_SHELL_POWDER, 5 * day),
         (Food.EGG, 100 * day),
-        # (Food.BARF, 4 * day),
     ]
-    needs = dog(age=3, weight=7, active=False, daily_kcal=daily_kcal)
-    needs = scale(needs, day)
-
-    p = RecipeSolver()
-
-    for food, ub in foods_hard:
-        p.add_food(food, ub, ub)
-    for food, ub in foods_opts:
-        p.add_food(food, 0, ub, True)
-    for nut, need in needs.items():
-        p.add_need(nut, *need)
-    # FEDIAF 2025 Table III-3b, adult maintenance: mass ratio Ca:P 1:1..2:1.
-    # Dimensionless: do not scale these bounds by the batch's number of days.
-    p.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1.0, 2.0)
-    optimal = p.solve()
-
-    if optimal:
-        p.print_foods()
-        p.print_nutrition(needs, day, detail)
-    else:
-        print("Solution not found")
+    return [IngredientSpec.fixed(food, grams) for food, grams in fixed] + [
+        IngredientSpec.optional_upto(food, grams, minimize_usage=True)
+        for food, grams in optional
+    ]
 
 
 if __name__ == "__main__":

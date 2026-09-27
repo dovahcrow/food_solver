@@ -129,3 +129,73 @@ uv sync
 报告中的 `incomplete data: ...` 列出实际使用但该营养素数据不全的食材。
 优化仍使用已知贡献（未知项按零贡献处理），组合项只有一项已知时使用
 部分和并标记不完整；不再通过读取 defaultdict 把缺失字段写成“已知零”。
+
+## 代码结构：Rust 库 + CLI + MCP
+
+求解器现在是 Rust 工作区，规划逻辑在一个库里，CLI 和 MCP 是它的两个前端：
+
+- `rust/food-core/`：`PlanRequest`（食材 + 天数 + 犬只档案）进，`PlanResult`
+  （配方 + 每日营养报告）出。`IngredientSpec` 用上下界描述食材：相等即固定
+  用量，`0 ~ 上限` 表示可选。数量都是**整批克数**，`days` 只缩放需求。
+- `rust/food-cli/`：`food` 命令。
+- `rust/food-mcp/`：`food-mcp`，把同一流程暴露成 `list_foods`、`get_needs`、
+  `solve_recipe` 三个 MCP 工具。
+- `rust/food-core/build.rs`：构建时读取 `foods/*.json`（外加 Python 源码里
+  三条内联配方）生成内嵌食材营养表，`src/foods.rs` 再用 `include!` 引进来。
+
+求解器用 [Clarabel](https://github.com/oxfordcontrol/Clarabel.rs)（牛津大学，
+CVXPY 的默认求解器），不是 `cvxrust`（只有 0.1.0，不成熟）。目标函数与
+Python 版完全一致：只有下限的软需求用 `max(0, (L - y) / L)^2`，有上下限的
+用两侧相对平方损失，另加 `U = 1.5L` 的隐式软上限；硬约束与钙磷比不变。
+Rust 版在原 10 天参考配方上与 Python 输出**数值一致**（见
+`rust/food-core/tests/reference.rs`）。
+
+```sh
+just build          # cargo build --release
+just test           # cargo test --workspace
+just run -d 10      # 运行 Rust CLI
+just check          # cargo check
+just clippy         # cargo clippy（-D warnings）
+```
+
+CLI 支持 `-d/--day`、`--detail`、`--daily-kcal`、`--weight`、`--age`、
+`--active`，以及可重复的 `-i FOOD:GRAMS[:optional|minimize|fixed]`；
+不写 `-i` 时沿用历史默认批次。`food --foods` 列出全部食材。
+
+## Python 参考实现
+
+`src/` 仍保留为 Python 参考实现，用于抓取/更新食材数据以及和 Rust 结果对照：
+`just opt -d 10` 运行它。MCP 支持已从 Python 侧移除，只保留在 Rust 的
+`food-mcp`。食材 JSON 更新后重新构建即可（`build.rs` 会自动重新生成内嵌表）。
+
+## 作为 Codex 插件使用
+
+`just make-plugin` 会把本仓库打包成**自包含**的 Codex 插件 `food-solver`
+（默认写到 `~/plugins/food-solver`，并更新 `~/.agents/plugins/marketplace.json`）：
+
+```sh
+just make-plugin                 # 构建并更新个人 marketplace
+just make-plugin --install       # 再执行 codex plugin add
+just make-plugin --skip-build --dest dist --archive dist/food-solver.tar.gz
+just release-plugin              # musl 静态构建 + 打包 dist/food-solver-musl.tar.gz
+```
+
+插件目录约 5 MB：`bin/food-mcp`、`bin/food`、`.mcp.json` 与 skill。
+食材数据库和 Clarabel 求解器都编译进二进制，**不需要 Python、运行时或本仓库**，
+仓库移动或删除后插件照常工作。
+
+`just release-plugin` 用 musl 目标构建**全静态** Linux 二进制，并把插件打成
+`dist/food-solver-musl.tar.gz`；tarball 里带 `install.sh` / `uninstall.sh`，
+目标机器解包后直接 `./food-solver/install.sh` 即可（复制文件、合并
+`~/.agents/plugins/marketplace.json`、执行 `codex plugin add`，需要 `python3`
+或 `jq`）。
+
+二进制是**平台相关**的（当前为 darwin-arm64）：要在哪台机器上跑，就在哪台
+机器上打包。本项目不做交叉编译；Linux 上直接 `cargo build --release` 即可
+（需要静态链接时用 `--target x86_64-unknown-linux-musl`，走系统 `musl-gcc`）。
+跨机分发与安装步骤见 `plugin/INSTALL.md`。
+
+`plugin/` 是插件模板，`scripts/make_plugin.py` 负责打包；要改插件内容请改
+模板，而不是安装后的副本。
+
+`just mcp` 可以在当前仓库以 stdio 方式跑同一个 MCP 服务，便于本地调试。
