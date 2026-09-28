@@ -90,6 +90,13 @@ impl Profile {
             softness: NeedSoftness::Soft,
         };
 
+        let hard = |minimum: f64, maximum: Option<f64>| Requirement {
+            minimum,
+            maximum,
+            required: NeedRequired::Required,
+            softness: NeedSoftness::Hard,
+        };
+
         let mut needs = BTreeMap::new();
 
         // Additional adult minima, all SOFT because food composition data may be
@@ -102,19 +109,25 @@ impl Profile {
         let mcg = |low: f64, ordinary: f64| minimum(low, ordinary) * MCG * modulation;
 
         needs.insert(Nutrient::Fat, soft(g(13.75, 13.75), None));
-        needs.insert(Nutrient::LinoleicAcid, soft(g(3.82, 3.27), None));
-        needs.insert(Nutrient::Arginine, soft(g(1.51, 1.30), None));
-        needs.insert(Nutrient::Histidine, soft(g(0.67, 0.58), None));
-        needs.insert(Nutrient::Isoleucine, soft(g(1.33, 1.15), None));
-        needs.insert(Nutrient::Leucine, soft(g(2.37, 2.05), None));
-        needs.insert(Nutrient::Lysine, soft(g(1.22, 1.05), None));
-        needs.insert(Nutrient::Methionine, soft(g(1.16, 1.00), None));
-        needs.insert(Nutrient::MethionineCystine, soft(g(2.21, 1.91), None));
-        needs.insert(Nutrient::Phenylalanine, soft(g(1.56, 1.35), None));
-        needs.insert(Nutrient::PhenylalanineTyrosine, soft(g(2.58, 2.23), None));
-        needs.insert(Nutrient::Threonine, soft(g(1.51, 1.30), None));
-        needs.insert(Nutrient::Tryptophan, soft(g(0.49, 0.43), None));
-        needs.insert(Nutrient::Valine, soft(g(1.71, 1.48), None));
+        needs.insert(Nutrient::LinoleicAcid, soft_optional(g(3.82, 3.27), None));
+        needs.insert(Nutrient::Arginine, soft_optional(g(1.51, 1.30), None));
+        needs.insert(Nutrient::Histidine, soft_optional(g(0.67, 0.58), None));
+        needs.insert(Nutrient::Isoleucine, soft_optional(g(1.33, 1.15), None));
+        needs.insert(Nutrient::Leucine, soft_optional(g(2.37, 2.05), None));
+        needs.insert(Nutrient::Lysine, soft_optional(g(1.22, 1.05), None));
+        needs.insert(Nutrient::Methionine, soft_optional(g(1.16, 1.00), None));
+        needs.insert(
+            Nutrient::MethionineCystine,
+            soft_optional(g(2.21, 1.91), None),
+        );
+        needs.insert(Nutrient::Phenylalanine, soft_optional(g(1.56, 1.35), None));
+        needs.insert(
+            Nutrient::PhenylalanineTyrosine,
+            soft_optional(g(2.58, 2.23), None),
+        );
+        needs.insert(Nutrient::Threonine, soft_optional(g(1.51, 1.30), None));
+        needs.insert(Nutrient::Tryptophan, soft_optional(g(0.49, 0.43), None));
+        needs.insert(Nutrient::Valine, soft_optional(g(1.71, 1.48), None));
         needs.insert(Nutrient::VitaminB5, soft(mg(4.11, 3.55), None));
         needs.insert(Nutrient::FolicAcid, soft(mcg(74.70, 64.50), None));
         needs.insert(Nutrient::Chloride, soft(g(0.43, 0.38), None));
@@ -141,28 +154,28 @@ impl Profile {
         let vitamin_a = |value: f64| value * VITAMIN_A_IU * modulation;
         needs.insert(
             Nutrient::VitaminA,
-            soft_optional(vitamin_a(1754.0), Some(vitamin_a(100_000.0))),
+            soft(vitamin_a(1754.0), Some(vitamin_a(100_000.0))),
         );
         needs.insert(Nutrient::VitaminB1, soft(mg(0.62, 0.54), None));
         needs.insert(Nutrient::VitaminB2, soft(mg(1.74, 1.50), None));
         needs.insert(Nutrient::VitaminB6, soft(mg(0.42, 0.36), None));
         needs.insert(Nutrient::VitaminB12, soft(mcg(9.68, 8.36), None));
-        let vitamin_e = |value: f64| value * VITAMIN_E_IU * modulation;
-        needs.insert(Nutrient::VitaminE, soft_optional(vitamin_e(10.40), None));
+        needs.insert(
+            Nutrient::VitaminE,
+            soft_optional(10.40 * VITAMIN_E_IU * modulation, None),
+        );
         let vitamin_d = |value: f64| value * VITAMIN_D_IU * modulation;
         needs.insert(
             Nutrient::VitaminD,
-            soft_optional(vitamin_d(159.0), Some(vitamin_d(800.0))),
+            soft(vitamin_d(159.0), Some(vitamin_d(800.0))),
         );
 
         needs.insert(
             Nutrient::Calcium,
-            Requirement {
-                minimum: minimum(1.45, 1.25) * G * modulation,
-                maximum: Some(6.25 * G * modulation),
-                required: NeedRequired::Required,
-                softness: NeedSoftness::Hard,
-            },
+            hard(
+                minimum(1.45, 1.25) * G * modulation,
+                Some(6.25 * G * modulation),
+            ),
         );
         needs.insert(Nutrient::Copper, soft(mg(2.08, 1.80), None));
         needs.insert(Nutrient::Iodine, soft(mg(0.30, 0.26), None));
