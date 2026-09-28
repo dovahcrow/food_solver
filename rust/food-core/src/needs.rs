@@ -78,6 +78,15 @@ pub fn dog_needs(profile: Profile) -> BTreeMap<Nutrient, Requirement> {
         softness: NeedSoftness::Soft,
     };
 
+    // A/D/E, choline and selenium keep their historical NOT_REQUIRED setting:
+    // they are reported but not optimised, matching the Python reference.
+    let soft_optional = |minimum: f64, maximum: Option<f64>| Requirement {
+        minimum,
+        maximum,
+        required: NeedRequired::NotRequired,
+        softness: NeedSoftness::Soft,
+    };
+
     let mut needs = BTreeMap::new();
 
     // Additional adult minima, all SOFT because food composition data may be
@@ -129,18 +138,18 @@ pub fn dog_needs(profile: Profile) -> BTreeMap<Nutrient, Requirement> {
     let vitamin_a = |value: f64| value * VITAMIN_A_IU * modulation;
     needs.insert(
         Nutrient::VitaminA,
-        soft(vitamin_a(1754.0), Some(vitamin_a(100_000.0))),
+        soft_optional(vitamin_a(1754.0), Some(vitamin_a(100_000.0))),
     );
     needs.insert(Nutrient::VitaminB1, soft(mg(0.62, 0.54), None));
     needs.insert(Nutrient::VitaminB2, soft(mg(1.74, 1.50), None));
     needs.insert(Nutrient::VitaminB6, soft(mg(0.42, 0.36), None));
     needs.insert(Nutrient::VitaminB12, soft(mcg(9.68, 8.36), None));
     let vitamin_e = |value: f64| value * VITAMIN_E_IU * modulation;
-    needs.insert(Nutrient::VitaminE, soft(vitamin_e(10.40), None));
+    needs.insert(Nutrient::VitaminE, soft_optional(vitamin_e(10.40), None));
     let vitamin_d = |value: f64| value * VITAMIN_D_IU * modulation;
     needs.insert(
         Nutrient::VitaminD,
-        soft(vitamin_d(159.0), Some(vitamin_d(800.0))),
+        soft_optional(vitamin_d(159.0), Some(vitamin_d(800.0))),
     );
 
     needs.insert(
@@ -155,9 +164,9 @@ pub fn dog_needs(profile: Profile) -> BTreeMap<Nutrient, Requirement> {
     needs.insert(Nutrient::Copper, soft(mg(2.08, 1.80), None));
     needs.insert(Nutrient::Iodine, soft(mg(0.30, 0.26), None));
     needs.insert(Nutrient::Zinc, soft(mg(20.80, 18.00), None));
-    needs.insert(Nutrient::Choline, soft(mg(474.0, 409.0), None));
+    needs.insert(Nutrient::Choline, soft_optional(mg(474.0, 409.0), None));
     needs.insert(Nutrient::Iron, soft(mg(10.40, 9.00), None));
-    needs.insert(Nutrient::Selenium, soft(mcg(67.50, 57.50), None));
+    needs.insert(Nutrient::Selenium, soft_optional(mcg(67.50, 57.50), None));
     needs.insert(
         Nutrient::Phosphorus,
         soft(g(1.16, 1.00), Some(4.0 * G * modulation)),

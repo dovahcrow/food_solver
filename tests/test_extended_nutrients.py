@@ -92,13 +92,16 @@ class ExtendedNutrientTests(unittest.TestCase):
             try:
                 os.chdir(directory)
                 Path('foods').mkdir()
-                Path('foods/RICE.json').write_text('{"__name__":"old","PROTEIN":0.1}')
+                # The cache is one file per food per source; a Mock getter has
+                # no source name, so it lands on the Inline tag.
+                cached = Path('foods/RICE_Inline.json')
+                cached.write_text('{"__name__":"old","PROTEIN":0.1}')
                 getter = Mock(return_value=('new', {N.LYSINE: .01}))
                 with patch.dict('src.food.GETTERS', {Food.RICE: getter}):
                     self.assertNotIn(N.LYSINE, get_or_load(Food.RICE))
                     getter.assert_not_called()
                     with redirect_stdout(io.StringIO()):
                         self.assertEqual(get_or_load(Food.RICE, refresh=True)[N.LYSINE], .01)
-                    self.assertEqual(json.loads(Path('foods/RICE.json').read_text())['LYSINE'], .01)
+                    self.assertEqual(json.loads(cached.read_text())['LYSINE'], .01)
             finally:
                 os.chdir(previous)

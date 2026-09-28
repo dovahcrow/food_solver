@@ -216,6 +216,37 @@ def foods_dir() -> Path:
     return Path(os.environ.get("FOODS_DIR") or "foods")
 
 
+#: Source tag for the few foods whose getter does not carry the source name,
+#: because a wrapper such as the cooked->raw chicken fix hides the inner name.
+SOURCE_OVERRIDES = {
+    Food.CHICKEN_BREAST: "Usda",
+}
+
+
+def source_tag(food: Food) -> str:
+    """The source tag this food's cache file carries.
+
+    Inline recipes have no remote source; the rest are tagged by the getter
+    they use, so a Python refresh writes the same `{FOOD}_{Source}.json` the
+    Rust side reads.
+    """
+    if food in SOURCE_OVERRIDES:
+        return SOURCE_OVERRIDES[food]
+    getter = GETTERS[food]
+    if isinstance(getter, dict):
+        return "Inline"
+    name = getattr(getter, "__qualname__", "")
+    if "chinanutri" in name:
+        return "Chinanutri"
+    if "usda" in name:
+        return "Usda"
+    return "Inline"
+
+
+def cache_path(food: Food, directory: Path) -> Path:
+    return directory / f"{food.name}_{source_tag(food)}.json"
+
+
 def get_or_load(food: Food, *, refresh: bool = False) -> Nutrients:
     getter = GETTERS[food]
     if isinstance(getter, dict):
@@ -227,11 +258,12 @@ def get_or_load(food: Food, *, refresh: bool = False) -> Nutrients:
 
     directory = foods_dir()
     directory.mkdir(parents=True, exist_ok=True)
+    path = cache_path(food, directory)
 
     try:
         if refresh:
             raise FileNotFoundError
-        with open(directory / f"{food.name}.json") as f:
+        with open(path) as f:
             serde = load(f)
             nuts = defaultdict(
                 int, {Nutrient[k]: v for k, v in serde.items() if k != "__name__"}
@@ -243,7 +275,7 @@ def get_or_load(food: Food, *, refresh: bool = False) -> Nutrients:
     print(f"Getting nutrients for {food.name}", file=sys.stderr)
     name, nuts = getter()
 
-    with open(directory / f"{food.name}.json", "w+") as f:
+    with open(path, "w+") as f:
         dump(
             {"__name__": name, **{k.name: v for k, v in nuts.items()}},
             f,

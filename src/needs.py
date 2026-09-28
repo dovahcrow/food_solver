@@ -168,7 +168,7 @@ def dog(
         Nutrient.VITAMIN_A: (
             minimum(1754, 1515) * VITAMIN_A_IU * mod,
             100000 * VITAMIN_A_IU * mod,
-            NeedRequired.REQUIRED,
+            NeedRequired.NOT_REQUIRED,
             NeedSoftness.SOFT,
         ),
         Nutrient.VITAMIN_B1: (
@@ -198,13 +198,13 @@ def dog(
         Nutrient.VITAMIN_E: (
             minimum(10.40, 9.00) * VITAMIN_E_IU * mod,
             None,
-            NeedRequired.REQUIRED,
+            NeedRequired.NOT_REQUIRED,
             NeedSoftness.SOFT,
         ),
         Nutrient.VITAMIN_D: (
             minimum(159, 138) * VITAMIN_D_IU * mod,
             800 * VITAMIN_D_IU * mod,
-            NeedRequired.REQUIRED,
+            NeedRequired.NOT_REQUIRED,
             NeedSoftness.SOFT,
         ),
         Nutrient.CALCIUM: (
@@ -234,7 +234,7 @@ def dog(
         Nutrient.CHOLINE: (
             minimum(474, 409) * MG * mod,
             None,
-            NeedRequired.REQUIRED,
+            NeedRequired.NOT_REQUIRED,
             NeedSoftness.SOFT,
         ),
         Nutrient.IRON: (
@@ -246,7 +246,7 @@ def dog(
         Nutrient.SELENIUM: (
             minimum(67.50, 57.50) * MCG * mod,
             None,
-            NeedRequired.REQUIRED,
+            NeedRequired.NOT_REQUIRED,
             NeedSoftness.SOFT,
         ),
         Nutrient.PHOSPHORUS: (

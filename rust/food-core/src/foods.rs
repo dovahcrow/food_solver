@@ -146,81 +146,92 @@ include!(concat!(env!("OUT_DIR"), "/foods_data.rs"));
 
 /// Which source each food uses, hardcoded here.
 ///
-/// A food with no entry falls back to the source its catalog lists first, which
-/// is the source its primary row was fetched from. This is the one place the
-/// choice lives; the cache files stay source-agnostic bodies of nutrients.
+/// One entry per food, so the choice lives in exactly one place. `build.rs`
+/// embeds every source's row and this table decides which one a run reads.
 pub const CHOOSE: &[(&str, &str)] = &[
+    ("BAICAI", "Chinanutri"),
+    ("BALANCEIT", "Inline"),
     ("BANANA", "SrLegacy"),
+    ("BARF", "Inline"),
+    ("BASA_FISH", "Chinanutri"),
     ("BEEF", "SrLegacy"),
+    ("BEEN_SPROUT", "Chinanutri"),
     ("BELL_PEPER", "SrLegacy"),
+    ("BOCAI", "Chinanutri"),
     ("BOKCHOY", "SrLegacy"),
     ("BROCCOLI", "SrLegacy"),
     ("CABBAGE", "SrLegacy"),
+    ("CANOLA_OIL", "Chinanutri"),
     ("CARROT", "SrLegacy"),
     ("CELERY", "SrLegacy"),
     ("CHICKEN_BREAST", "SrLegacy"),
+    ("CHICKEN_GIZZARD", "Chinanutri"),
+    ("CHICKEN_HEART", "Chinanutri"),
+    ("CHICKEN_LIVER", "Chinanutri"),
     ("CHICKEN_THIGH", "SrLegacy"),
+    ("CHINESE_LETTUS", "Chinanutri"),
     ("CUCUMBER", "SrLegacy"),
+    ("DUCK_GIZZARD", "Chinanutri"),
     ("EGG", "SrLegacy"),
     ("EGGPLANT", "SrLegacy"),
+    ("EGG_SHELL_POWDER", "Inline"),
+    ("FUGUA", "Chinanutri"),
+    ("JIANGDOU", "Chinanutri"),
+    ("JIEGUA", "Chinanutri"),
+    ("JUANXINCAI", "Chinanutri"),
+    ("KONGXINCAI", "Chinanutri"),
+    ("KUIGUA", "Chinanutri"),
+    ("LUOBO", "Chinanutri"),
+    ("OYSTER", "Chinanutri"),
+    ("PORK", "Chinanutri"),
+    ("PORK_FAT", "Chinanutri"),
+    ("PORK_HEART", "Chinanutri"),
+    ("PORK_INTESTINE", "Chinanutri"),
+    ("PORK_LIVER", "Chinanutri"),
+    ("PORK_TONGUE", "Chinanutri"),
     ("POTATO", "SrLegacy"),
+    ("PUMPKIN", "Chinanutri"),
+    ("QINCAI", "Chinanutri"),
     ("RICE", "SrLegacy"),
+    ("SALT", "Chinanutri"),
+    ("SHANYAO", "Chinanutri"),
+    ("SHITAKE", "Chinanutri"),
+    ("SIGUA", "Chinanutri"),
+    ("SIJIDOU", "Chinanutri"),
+    ("SOYBEAN_GREEN", "Chinanutri"),
     ("SOY_MILK", "SrLegacy"),
     ("SWEET_POTATO", "SrLegacy"),
+    ("TOFU_FIRM", "Chinanutri"),
+    ("TOFU_SOFT", "Chinanutri"),
+    ("TOMATO", "Chinanutri"),
+    ("WHITE_MUSHROOM", "Chinanutri"),
+    ("WINTER_MELON", "Chinanutri"),
+    ("ZIGANLAN", "Chinanutri"),
     ("ZUCCHINI", "SrLegacy"),
 ];
 
-/// Every `(food, source, row)` triple, as generated.
-pub static FOOD_ROWS_BY_KEY: LazyLock<HashMap<(&'static str, &'static str), Food>> =
-    LazyLock::new(|| {
-        FOOD_ROWS
-            .iter()
-            .map(|(food, source, row)| ((*food, *source), *row))
-            .collect()
-    });
-
 /// The source the solver uses for a food.
-///
-/// Falls back to the food's primary source when no explicit entry exists, so a
-/// new food does not need a line here.
 pub fn chosen_source(food: &str) -> Option<&'static str> {
-    if let Some((_, source)) = CHOOSE.iter().find(|(name, _)| *name == food) {
-        return Some(source);
-    }
-    // `FOOD_ROWS_BY_KEY` is keyed by (food, source); the catalog's primary
-    // source is the one `build.rs` wrote first for that food.
-    FOOD_ROWS
+    CHOOSE
         .iter()
-        .find(|(name, _, _)| *name == food)
-        .map(|(_, source, _)| *source)
-}
-
-/// The row the solver uses for a food: the one from its chosen source.
-pub fn food(name: &str) -> Option<&'static Food> {
-    let source = chosen_source(name)?;
-    FOOD_ROWS
-        .iter()
-        .find(|(food, tag, _)| *food == name && *tag == source)
-        .map(|(_, _, row)| row)
-}
-
-/// Every row embedded for a food, whatever the source.
-///
-/// Exposed so a caller can compare sources; the solver itself only uses
-/// [`food`].
-pub fn food_rows(name: &str) -> Vec<(&'static str, &'static Food)> {
-    FOOD_ROWS
-        .iter()
-        .filter(|(food, _, _)| *food == name)
-        .map(|(_, source, row)| (*source, row))
-        .collect()
+        .find(|(name, _)| *name == food)
+        .map(|(_, source)| *source)
 }
 
 /// The food table keyed by canonical name, holding each food's chosen row.
+///
+/// Built once from the generated `(food, source, row)` triples: every source is
+/// embedded, and [`CHOOSE`] picks the one that fills the table.
 pub static FOODS: LazyLock<HashMap<&'static str, Food>> = LazyLock::new(|| {
     FOOD_NAMES
         .iter()
-        .filter_map(|name| food(name).map(|row| (*name, *row)))
+        .filter_map(|name| {
+            let source = chosen_source(name)?;
+            FOOD_ROWS
+                .iter()
+                .find(|(food, tag, _)| food == name && *tag == source)
+                .map(|(name, _, row)| (*name, *row))
+        })
         .collect()
 });
 

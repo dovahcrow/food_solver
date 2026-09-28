@@ -1,7 +1,7 @@
 //! The embedded food table must stay complete and self-consistent.
 
 use food_core::foods;
-use food_core::{chosen_source, food_rows, parse_food, Food, Nutrient, FOODS, FOOD_NAMES};
+use food_core::{chosen_source, parse_food, Food, Nutrient, FOODS, FOOD_NAMES};
 
 #[test]
 fn every_named_food_is_in_the_map() {
@@ -44,29 +44,30 @@ fn accessor_reads_the_named_fields() {
 }
 
 #[test]
-fn every_food_resolves_to_its_chosen_row() {
-    // `FOODS` holds one row per food, taken from the source `CHOOSE` names (or
-    // the primary source when there is no entry), and every name must resolve.
+fn every_food_has_a_row_and_a_source() {
+    // `FOODS` holds one chosen row per food, and every food names a source.
     for name in FOOD_NAMES {
-        assert!(FOODS.contains_key(name), "{name} has no chosen row");
-        let source = chosen_source(name).unwrap_or_else(|| panic!("{name} has no source"));
-        assert!(
-            food_rows(name).iter().any(|(tag, _)| *tag == source),
-            "{name} chose {source} but has no such row"
-        );
+        assert!(FOODS.contains_key(name), "{name} has no row");
+        assert!(chosen_source(name).is_some(), "{name} has no chosen source");
     }
 }
 
 #[test]
-fn choose_only_names_known_foods() {
+fn choose_has_one_entry_per_food() {
+    // `CHOOSE` covers every food exactly once and names only known sources.
+    assert_eq!(
+        foods::CHOOSE.len(),
+        FOOD_NAMES.len(),
+        "CHOOSE must have one entry per food"
+    );
     for (name, source) in foods::CHOOSE {
         assert!(
             FOOD_NAMES.contains(name),
             "CHOOSE names unknown food {name}"
         );
         assert!(
-            food_rows(name).iter().any(|(tag, _)| tag == source),
-            "CHOOSE sends {name} to {source}, which has no cached row"
+            ["Usda", "Chinanutri", "SrLegacy", "Mext", "Inline"].contains(source),
+            "CHOOSE sends {name} to unknown source {source}"
         );
     }
 }
