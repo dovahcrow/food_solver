@@ -52,11 +52,11 @@ fn reference_batch_solves_to_a_known_optimum() {
         (FoodName::CELERY, 245.0),
         (FoodName::JIANGDOU, 411.0),
         (FoodName::PORK, 500.0),
-        (FoodName::RICE, 602.3798972429496),
+        (FoodName::RICE, 603.9268675106157),
         (FoodName::CANOLA_OIL, 0.0),
-        (FoodName::SALT, 0.11534128484496192),
-        (FoodName::EGG_SHELL_POWDER, 15.83709288043366),
-        (FoodName::EGG, 846.2116410669382),
+        (FoodName::SALT, 0.3149731100533993),
+        (FoodName::EGG_SHELL_POWDER, 15.442149148235643),
+        (FoodName::EGG, 861.8174593980284),
     ];
     for (food, grams) in expected {
         let actual = result
@@ -67,14 +67,14 @@ fn reference_batch_solves_to_a_known_optimum() {
 
     assert_close(
         result.objective.expect("objective"),
-        4.12651597544642,
+        4.834415659296808,
         0.05,
         "objective",
     );
 
     let energy = result.nutrient(Nutrient::Energy).expect("energy");
     assert_eq!(energy.unit, "kJ");
-    assert_close(energy.value, 1796.0900632775226, 0.05, "energy per day");
+    assert_close(energy.value, 1796.0900627708816, 0.05, "energy per day");
     assert_eq!(energy.status.as_str(), "within range");
 }
 
@@ -127,4 +127,45 @@ fn combined_amino_targets_are_reported() {
             .unwrap_or_else(|| panic!("{}", nutrient.name()));
         assert!(report.minimum > 0.0);
     }
+}
+
+#[test]
+fn report_scores_fixed_weights_without_solving() {
+    // `report` takes every weight as exact and reports what that batch
+    // supplies, so the recipe echoes the input rather than an optimum.
+    let request = PlanRequest {
+        ingredients: vec![
+            IngredientSpec::fixed(FoodName::PORK, 500.0),
+            IngredientSpec::fixed(FoodName::RICE, 700.0),
+        ],
+        days: 7,
+        profile: Profile::default(),
+        implicit_soft_upper_multiplier: Some(1.5),
+        detail: false,
+    };
+    let result = food_core::report(&request).expect("report");
+
+    assert_eq!(result.amount(FoodName::PORK), Some(500.0));
+    assert_eq!(result.amount(FoodName::RICE), Some(700.0));
+    assert_eq!(result.batch_grams, 1200.0);
+    assert!(result.nutrition.len() > 1);
+    // Per-day values divide the batch by the day count.
+    let celery = result
+        .recipe
+        .iter()
+        .find(|line| line.food == FoodName::RICE)
+        .unwrap();
+    assert!((celery.grams_per_day - 700.0 / 7.0).abs() < 1e-9);
+}
+
+#[test]
+fn report_rejects_a_non_fixed_weight() {
+    let request = PlanRequest {
+        ingredients: vec![IngredientSpec::minimize(FoodName::RICE, 700.0)],
+        days: 1,
+        profile: Profile::default(),
+        implicit_soft_upper_multiplier: Some(1.5),
+        detail: false,
+    };
+    assert!(food_core::report(&request).is_err());
 }

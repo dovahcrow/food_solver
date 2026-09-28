@@ -3,7 +3,8 @@
 //! |Flow| Batch ingredient weights plus a day count go in; a solved recipe and
 //! its per-day nutrient report come out.
 //!
-//! `food solve -d 10 -i RICE:500` solves a batch; `food fetch` refreshes the
+//! `food solve -d 10 -i RICE:500` solves a batch; `food report -i RICE:500`
+//! scores an exact batch without solving; `food fetch` refreshes the
 //! `foods/*.json` caches the table is built from, ported from the Python
 //! getters.
 
@@ -18,7 +19,7 @@ use anyhow::{anyhow, Context, Error};
 use clap::{ArgAction, Parser, Subcommand};
 use culpa::{throw, throws};
 use food_core::{
-    plan, FoodName, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus,
+    plan, report, FoodName, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus,
 };
 
 /// ANSI colours, matching the Python frontend so output stays comparable.
@@ -34,9 +35,10 @@ mod color {
 #[derive(Parser)]
 #[command(
     name = "food",
-    about = "Solve dog food batches and refresh the food database.",
-    long_about = "Solve a batch with `food solve`, or refresh the food data the \
-                  solver embeds with `food fetch`."
+    about = "Solve dog food batches, report fixed batches, and refresh the food database.",
+    long_about = "Solve a batch with `food solve`, report an exact batch's nutrients \
+                  with `food report`, or refresh the food data the solver embeds \
+                  with `food fetch`."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -51,6 +53,46 @@ enum Command {
     Fetch(CmdFetch),
     /// Expand the bulk SR Legacy JSON into per-food cache files.
     ExpandSrLegacy(CmdExpandSrLegacy),
+    /// Report the nutrients of a batch at fixed weights, without solving.
+    Report(CmdReport),
+}
+
+/// Report one batch at fixed weights, without solving.
+#[derive(Parser, Debug)]
+struct CmdReport {
+    /// Number of days the batch covers; scales the requirements.
+    #[arg(short = 'd', long = "day", default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..))]
+    day: u32,
+
+    /// Include each food's contribution to every nutrient.
+    #[arg(long, default_value_t = false, action = ArgAction::Set)]
+    detail: bool,
+
+    /// Override the adult dog daily energy estimate (kcal, before mixing).
+    #[arg(long, value_parser = clap::value_parser!(f64))]
+    daily_kcal: Option<f64>,
+
+    /// Dog body weight in kg.
+    #[arg(long, default_value_t = 7.0)]
+    weight: f64,
+
+    /// Dog age in years; only adult maintenance is supported.
+    #[arg(long, default_value_t = 3.0)]
+    age: f64,
+
+    /// Select the 110 kcal/kg^0.75 profile instead of 95.
+    #[arg(long, default_value_t = false, action = ArgAction::Set)]
+    active: bool,
+
+    /// Add an ingredient as FOOD:GRAMS. Unlike `solve`, every weight is exact:
+    /// the report says what this batch supplies, it does not choose amounts.
+    #[arg(
+        short = 'i',
+        long = "ingredient",
+        value_name = "FOOD:GRAMS",
+        required = true
+    )]
+    ingredient: Vec<IngredientInput>,
 }
 
 /// Solve a batch from ingredient amounts and a day count.
@@ -118,6 +160,7 @@ fn main_body(cli: Cli) {
         Command::Solve(solve) => solve.run()?,
         Command::Fetch(fetch) => fetch.run()?,
         Command::ExpandSrLegacy(expand) => expand.run()?,
+        Command::Report(report) => report.run()?,
     }
 }
 
@@ -271,6 +314,46 @@ impl CmdExpandSrLegacy {
             println!("wrote {}", directory.join(file).display());
         }
         println!("{} file(s) written", written.len());
+    }
+}
+
+impl CmdReport {
+    #[throws(Error)]
+    fn run(&self) {
+        // A report describes an exact batch, so only fixed weights make sense.
+        let mut ingredients = Vec::new();
+        for item in &self.ingredient {
+            if item.kind != IngredientKind::Fixed {
+                throw!(anyhow!(
+                    "`report` needs an exact weight for {}; drop the suffix",
+                    item.food.name()
+                ));
+            }
+            ingredients.push(item.spec());
+        }
+
+        let request = PlanRequest {
+            ingredients,
+            days: self.day,
+            profile: Profile {
+                age: self.age,
+                weight: self.weight,
+                active: self.active,
+                daily_kcal: self.daily_kcal,
+            },
+            implicit_soft_upper_multiplier: Some(1.5),
+            detail: self.detail,
+        };
+        let result = report(&request)?;
+
+        println!("Batch:");
+        for line in &result.recipe {
+            println!("  {} = {}", line.food, format::weight(line.grams));
+        }
+        println!("Nutrition (per day):");
+        for report in &result.nutrition {
+            println!("{}", format_nutrient(report, self.detail));
+        }
     }
 }
 

@@ -18,7 +18,7 @@ pub mod units;
 pub use foods::{Food, FoodName, FoodSource, ALL as FOOD_NAMES, FOODS};
 pub use needs::{scale, Profile};
 pub use nutrient::{nutrient_value, Nutrient};
-pub use planner::{plan, IngredientSpec, PlanRequest, PlanResult, RecipeLine};
+pub use planner::{plan, report, IngredientSpec, PlanRequest, PlanResult, RecipeLine};
 pub use recipe::{
     nutrition_report, solve, FoodRow, NeedRequired, NeedSoftness, NutrientReport, Problem,
     RatioConstraint, ReportStatus, Requirement, Solution, SolveStatus,

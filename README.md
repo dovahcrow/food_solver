@@ -175,8 +175,9 @@ just clippy         # cargo clippy（-D warnings）
 
 CLI 支持 `-d/--day`、`--detail`、`--daily-kcal`、`--weight`、`--age`、
 `--active`，以及可重复的 `-i FOOD:GRAMS[:optional|minimize|fixed]`。
-求解时必须至少给一个 `-i`（不再有内置默认批次）。`food fetch --list`
-列出全部食材，`food fetch` 刷新食材缓存。
+求解时必须至少给一个 `-i`（不再有内置默认批次）。`food report -i FOOD:GRAMS`
+按**给定用量**（不求解）直接输出同一套营养报告，用来看某批配方实际提供了多少
+营养。`food fetch --list` 列出全部食材，`food fetch` 刷新食材缓存。
 
 Python 参考实现（`just opt`）同样要求至少一个 `-i`，后缀语义一致。
 

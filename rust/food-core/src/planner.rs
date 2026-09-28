@@ -241,6 +241,68 @@ pub fn plan(request: &PlanRequest) -> PlanResult {
     }
 }
 
+/// Build the nutrient report for a batch of fixed weights, without solving.
+///
+/// Every ingredient is taken at its declared weight (`lower`, which the fixed
+/// spec sets equal to `upper`), so this answers "what does this exact batch
+/// supply?" rather than "what should the batch be?". The profile and day count
+/// still drive the requirement bounds the report compares against.
+#[throws(Error)]
+pub fn report(request: &PlanRequest) -> PlanResult {
+    if request.days == 0 || request.days > MAX_DAYS {
+        throw!(anyhow!("days must be between 1 and {MAX_DAYS}"));
+    }
+
+    let foods = food_rows(&request.ingredients)?;
+    for food in &foods {
+        if food.lower != food.upper {
+            throw!(anyhow!(
+                "{} must have an exact weight for a report",
+                food.name.name()
+            ));
+        }
+    }
+    let needs = request.requirements()?;
+    let problem = Problem {
+        foods,
+        needs: needs.clone(),
+        ratios: vec![RatioConstraint {
+            numerator: Nutrient::Calcium,
+            denominator: Nutrient::Phosphorus,
+            minimum: CA_P_RATIO_MIN,
+            maximum: CA_P_RATIO_MAX,
+        }],
+        implicit_soft_upper_multiplier: request.implicit_soft_upper_multiplier,
+    };
+
+    let grams: Vec<f64> = problem.foods.iter().map(|food| food.lower).collect();
+    let recipe: Vec<RecipeLine> = problem
+        .foods
+        .iter()
+        .zip(&grams)
+        .map(|(food, grams)| RecipeLine {
+            food: food.name,
+            grams: *grams,
+            grams_per_day: *grams / f64::from(request.days),
+            optional: false,
+            upper_bound: food.upper,
+        })
+        .collect();
+    let nutrition = nutrition_report(&problem, &needs, &grams, request.days, request.detail);
+    let batch_grams = recipe.iter().map(|line| line.grams).sum();
+
+    PlanResult {
+        optimal: true,
+        status: "reported".to_string(),
+        objective: None,
+        days: request.days,
+        recipe,
+        batch_grams,
+        nutrition,
+        attempted: Vec::new(),
+    }
+}
+
 /// Resolve a user-supplied food name to its canonical name.
 #[throws(Error)]
 pub fn resolve_food(name: &str) -> FoodName {
