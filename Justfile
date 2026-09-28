@@ -55,5 +55,5 @@ mcp:
   cargo run --quiet --bin food-mcp
 
 example:
-  just run solve -d 7 -i PORK:596 -i CHICKEN_HEART:244 -i CHICKEN_BREAST:860:optional -i CARROT:566:optional -i JIANGDOU:700:optional -i BAICAI:562:optional -i BROCCOLI:500:optional -i PUMPKIN:500:optional -i EGG:700:minimize -i EGG_SHELL_POWDER:70:minimize -i CANOLA_OIL:70:minimize -i SALT:35:minimize -i RICE:7000:minimize
+  just run solve --detail true -d 14 -i PORK:596:optional -i CHICKEN_HEART:244:optional -i CHICKEN_BREAST:860:optional -i CARROT:566:optional -i JIANGDOU:700:optional -i BAICAI:562:optional -i BROCCOLI:500:optional -i PUMPKIN:500:optional -i EGG:700:minimize -i EGG_SHELL_POWDER:70:minimize -i CANOLA_OIL:70:minimize -i SALT:35:minimize -i RICE:7000:minimize
 

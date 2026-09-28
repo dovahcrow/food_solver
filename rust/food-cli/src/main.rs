@@ -301,12 +301,8 @@ impl CmdSolve {
 
         println!("Solution:");
         for line in &result.recipe {
-            // Python shows two significant digits of the batch grams.
-            println!(
-                "  {} = {:.1}",
-                line.food,
-                format::two_significant(line.grams)
-            );
+            // Batch grams print with a magnitude-dependent resolution.
+            println!("  {} = {}", line.food, format::weight(line.grams));
         }
         println!("Nutrition (per day):");
         for report in &result.nutrition {

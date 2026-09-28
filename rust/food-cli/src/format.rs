@@ -1,18 +1,8 @@
-//! Number formatting matching the Python frontend's `%g`-family output.
+//! Number formatting for the CLI report.
 //!
-//! Python printed food weights as `f"{amount:.1f}"` after rounding to two
-//! significant digits, and report values with C's `%g`. Reproducing those
-//! rules keeps the two frontends directly comparable.
-
-/// Round to `digits` significant digits, like C's `%.{digits}g` precision.
-pub fn round_significant(value: f64, digits: usize) -> f64 {
-    if value == 0.0 || !value.is_finite() {
-        return value;
-    }
-    let magnitude = value.abs().log10().floor() as i32;
-    let factor = 10f64.powi(digits as i32 - 1 - magnitude);
-    (value * factor).round() / factor
-}
+//! Food weights print with a resolution that follows their magnitude, so a
+//! 500 g staple and a 1.2 g additive are both readable without a long tail of
+//! noise digits. Report values still use C's `%g`.
 
 /// Python's `f"{value:g}"`, i.e. C's `%g` with the default precision of 6.
 ///
@@ -59,9 +49,35 @@ fn trim_zeros(text: String) -> String {
     }
 }
 
-/// Two-significant-digit rounding, as the Python frontend displayed weights.
-pub fn two_significant(value: f64) -> f64 {
-    round_significant(value, 2)
+/// Format a batch weight with a magnitude-dependent number of decimals.
+///
+/// | magnitude      | decimals |
+/// |----------------|----------|
+/// | `>= 100`       | 0        |
+/// | `10 .. 100`    | 1        |
+/// | `1 .. 10`      | 2        |
+/// | `0.01 .. 1`    | 2        |
+/// | `< 0.01`       | shown as `0` |
+///
+/// A negative value is impossible from the solver, but the magnitude rules
+/// apply to it the same way (`abs` decides the decimals) so the helper stays
+/// total.
+pub fn weight(value: f64) -> String {
+    if !value.is_finite() {
+        return format!("{value}");
+    }
+    let magnitude = value.abs();
+    if magnitude < 0.01 {
+        return "0".to_string();
+    }
+    let decimals = if magnitude >= 100.0 {
+        0
+    } else if magnitude >= 10.0 {
+        1
+    } else {
+        2
+    };
+    format!("{value:.decimals$}")
 }
 
 /// The `%.2f`-style fixed rendering the Python frontend used for bounds.

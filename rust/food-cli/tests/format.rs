@@ -1,4 +1,4 @@
-//! The report formatting must match Python's `%g`-family output.
+//! The report formatting helpers.
 
 #[path = "../src/format.rs"]
 #[allow(dead_code)]
@@ -28,20 +28,37 @@ fn g_matches_python_percent_g() {
 }
 
 #[test]
-fn two_significant_matches_python_two_g() {
-    // Python printed weights as f"{float(f'{x:.2g}'):.1f}".
-    // These are the solver's actual optima, so the two-significant-digit
-    // rounding is exercised on the same values the CLI prints.
+fn weight_decimals_follow_magnitude() {
     let cases = [
-        (564.1651680898664, "560.0"),
-        (244.99999999999994, "240.0"),
-        (961.6387897502321, "960.0"),
-        (15.386216432485288, "15.0"),
-        (500.00000000000006, "500.0"),
-        (0.0, "0.0"),
+        // >= 100: whole grams.
+        (1796.0900634150437, "1796"),
+        (564.1651680898664, "564"),
+        (100.0, "100"),
+        // 99.96 is below 100, so it takes one decimal and rounds up to 100.0.
+        (99.96, "100.0"),
+        // 10..100: one decimal.
+        (99.4, "99.4"),
+        (15.386216432485288, "15.4"),
+        (10.0, "10.0"),
+        // 1..10: two decimals.
+        (9.87, "9.87"),
+        (1.0, "1.00"),
+        // 0.01..1: two decimals.
+        (0.98, "0.98"),
+        (0.013, "0.01"),
+        // < 0.01: shown as zero.
+        (0.009, "0"),
+        (0.0, "0"),
     ];
     for (value, expected) in cases {
-        let rounded = format::two_significant(value);
-        assert_eq!(format!("{rounded:.1}"), expected, "value {value}");
+        assert_eq!(format::weight(value), expected, "value {value}");
     }
+}
+
+#[test]
+fn weight_is_total_on_negatives_and_infinities() {
+    // The solver never returns these, but the helper must not panic.
+    assert_eq!(format::weight(-150.0), "-150");
+    assert_eq!(format::weight(-3.456), "-3.46");
+    assert_eq!(format::weight(f64::INFINITY), "inf");
 }
