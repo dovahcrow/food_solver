@@ -15,7 +15,7 @@ pub mod planner;
 pub mod recipe;
 pub mod units;
 
-pub use foods::{chosen_source, parse_food, Food, FoodName, FoodSource, ALL as FOOD_NAMES, FOODS};
+pub use foods::{Food, FoodName, FoodSource, ALL as FOOD_NAMES, FOODS};
 pub use needs::{scale, Profile};
 pub use nutrient::{nutrient_value, Nutrient};
 pub use planner::{plan, IngredientSpec, PlanRequest, PlanResult, RecipeLine};

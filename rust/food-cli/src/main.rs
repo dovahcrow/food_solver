@@ -18,7 +18,7 @@ use anyhow::{anyhow, Context, Error};
 use clap::{ArgAction, Parser, Subcommand};
 use culpa::{throw, throws};
 use food_core::{
-    parse_food, plan, FoodName, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus,
+    plan, FoodName, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus,
 };
 
 /// ANSI colours, matching the Python frontend so output stays comparable.
@@ -144,9 +144,8 @@ impl CmdFetch {
                 } else {
                     format!(" + {}", extras.join(" + "))
                 };
-                let chosen = food_core::parse_food(entry.name)
-                    .map(food_core::chosen_source)
-                    .map(|source| source.name())
+                let chosen = FoodName::parse(entry.name)
+                    .map(|food| food.source().name())
                     .unwrap_or("?");
                 println!("{} {source}{suffix} -> choose {chosen}", entry.name);
             }
@@ -360,7 +359,7 @@ impl FromStr for IngredientInput {
                 "{spec:?} must be FOOD:GRAMS or FOOD:GRAMS:optional"
             ));
         }
-        let food = parse_food(parts[0])
+        let food = FoodName::parse(parts[0])
             .ok_or_else(|| format!("Unknown food {:?}; run `food fetch --list`", parts[0]))?;
         let grams: f64 = parts[1]
             .parse()

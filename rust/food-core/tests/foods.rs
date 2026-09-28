@@ -1,26 +1,27 @@
 //! The embedded food table must stay complete and self-consistent.
 
 use food_core::foods;
-use food_core::{
-    chosen_source, parse_food, Food, FoodName, FoodSource, Nutrient, FOODS, FOOD_NAMES,
-};
+use food_core::{Food, FoodName, FoodSource, Nutrient, FOODS, FOOD_NAMES};
 
 #[test]
 fn every_named_food_is_in_the_map() {
     assert_eq!(FOODS.len(), FOOD_NAMES.len());
     for name in FOOD_NAMES {
         assert!(FOODS.contains_key(name), "{name} missing from FOODS");
-        assert_eq!(parse_food(name.name()), Some(*name));
+        assert_eq!(FoodName::parse(name.name()), Some(*name));
     }
 }
 
 #[test]
-fn parse_food_normalises_names() {
-    assert_eq!(parse_food("chicken breast"), Some(FoodName::CHICKEN_BREAST));
-    assert_eq!(parse_food("Food.egg"), Some(FoodName::EGG));
-    assert_eq!(parse_food("  pork  "), Some(FoodName::PORK));
-    assert_eq!(parse_food("pork-heart"), Some(FoodName::PORK_HEART));
-    assert_eq!(parse_food("nope"), None);
+fn parse_normalises_names() {
+    assert_eq!(
+        FoodName::parse("chicken breast"),
+        Some(FoodName::CHICKEN_BREAST)
+    );
+    assert_eq!(FoodName::parse("Food.egg"), Some(FoodName::EGG));
+    assert_eq!(FoodName::parse("  pork  "), Some(FoodName::PORK));
+    assert_eq!(FoodName::parse("pork-heart"), Some(FoodName::PORK_HEART));
+    assert_eq!(FoodName::parse("nope"), None);
 }
 
 #[test]
@@ -50,7 +51,7 @@ fn every_food_has_a_row_and_a_source() {
     // `FOODS` holds one chosen row per food, and every food names a source.
     for name in FOOD_NAMES {
         assert!(FOODS.contains_key(name), "{name} has no row");
-        let _ = chosen_source(*name);
+        let _ = name.source();
     }
 }
 

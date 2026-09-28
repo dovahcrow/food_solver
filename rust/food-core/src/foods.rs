@@ -2,12 +2,15 @@
 //!
 //! `build.rs` embeds every cached row — one per food per source — from
 //! `foods/{FOOD}_{Source}.json` plus the three inline recipes. Callers name a
-//! food with [`FoodName`]; [`chosen_source`] maps it to the source the solver
-//! should use, and [`FOODS`] returns the matching row. Values are the solver's
+//! food with [`FoodName`]; [`FoodName::source`] gives the source the solver
+//! uses, and [`FOODS`] returns the matching row. Values are the solver's
 //! base units: grams per gram of food, with `ENERGY` in joules per gram.
 
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::LazyLock;
+
+use serde::Serialize;
 
 use crate::nutrient::Nutrient;
 
@@ -144,28 +147,28 @@ impl Food {
 include!(concat!(env!("OUT_DIR"), "/foods_data.rs"));
 
 /// `FoodName` prints as its canonical name, so reports and JSON stay readable.
-impl std::fmt::Display for FoodName {
+impl fmt::Display for FoodName {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(self.name())
     }
 }
 
 /// Serialise a `FoodName` as its canonical name string.
-impl serde::Serialize for FoodName {
+impl Serialize for FoodName {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.name())
     }
 }
 
 /// `FoodSource` prints as its file-name tag.
-impl std::fmt::Display for FoodSource {
+impl fmt::Display for FoodSource {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(self.name())
     }
 }
 
 /// Serialise a `FoodSource` as its tag string.
-impl serde::Serialize for FoodSource {
+impl Serialize for FoodSource {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.name())
     }
@@ -237,15 +240,6 @@ pub const CHOOSE: &[(FoodName, FoodSource)] = &[
     (FoodName::ZUCCHINI, FoodSource::SrLegacy),
 ];
 
-/// The source the solver uses for a food.
-pub fn chosen_source(food: FoodName) -> FoodSource {
-    CHOOSE
-        .iter()
-        .find(|(name, _)| *name == food)
-        .map(|(_, source)| *source)
-        .expect("every food has a CHOOSE entry")
-}
-
 /// The food table keyed by canonical name, holding each food's chosen row.
 ///
 /// Built once from the generated `(food, source, row)` triples: every source is
@@ -253,7 +247,7 @@ pub fn chosen_source(food: FoodName) -> FoodSource {
 pub static FOODS: LazyLock<HashMap<FoodName, Food>> = LazyLock::new(|| {
     ALL.iter()
         .map(|&food| {
-            let source = chosen_source(food);
+            let source = food.source();
             let row = FOOD_ROWS
                 .iter()
                 .find(|(name, tag, _)| *name == food && *tag == source)
@@ -264,13 +258,26 @@ pub static FOODS: LazyLock<HashMap<FoodName, Food>> = LazyLock::new(|| {
         .collect()
 });
 
-/// Parse a user-supplied food name into its canonical name.
-///
-/// Accepts case-insensitive names, spaces or hyphens instead of
-/// underscores, and a leading `Food.` qualifier.
-pub fn parse_food(name: &str) -> Option<FoodName> {
-    let trimmed = name.trim();
-    let key = trimmed.rsplit('.').next().unwrap_or(trimmed);
-    let normalized = key.trim().to_ascii_uppercase().replace([' ', '-'], "_");
-    ALL.iter().copied().find(|food| food.name() == normalized)
+impl FoodName {
+    /// The source the solver uses for this food.
+    ///
+    /// Every food has exactly one entry in [`CHOOSE`].
+    pub fn source(self) -> FoodSource {
+        CHOOSE
+            .iter()
+            .find(|(name, _)| *name == self)
+            .map(|(_, source)| *source)
+            .expect("every food has a CHOOSE entry")
+    }
+
+    /// Parse a user-supplied food name into its canonical name.
+    ///
+    /// Accepts case-insensitive names, spaces or hyphens instead of
+    /// underscores, and a leading `Food.` qualifier.
+    pub fn parse(name: &str) -> Option<Self> {
+        let trimmed = name.trim();
+        let key = trimmed.rsplit('.').next().unwrap_or(trimmed);
+        let normalized = key.trim().to_ascii_uppercase().replace([' ', '-'], "_");
+        ALL.iter().copied().find(|food| food.name() == normalized)
+    }
 }

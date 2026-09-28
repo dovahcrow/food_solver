@@ -10,7 +10,7 @@ use rmcp::{
 use serde::{Deserialize, Serialize};
 
 use food_core::{
-    parse_food, plan, scale, IngredientSpec, NeedRequired, NeedSoftness, PlanRequest, PlanResult,
+    plan, scale, FoodName, IngredientSpec, NeedRequired, NeedSoftness, PlanRequest, PlanResult,
     Profile, FOOD_NAMES, MAX_DAYS,
 };
 use serde_json::{to_string_pretty, Value};
@@ -196,7 +196,7 @@ fn build_plan_request(request: &SolveRequest) -> PlanRequest {
     }
     let mut ingredients = Vec::new();
     for item in &request.ingredients {
-        let food = parse_food(&item.food).ok_or_else(|| {
+        let food = FoodName::parse(&item.food).ok_or_else(|| {
             anyhow!(
                 "Unknown food {:?}; call list_foods for valid names",
                 item.food

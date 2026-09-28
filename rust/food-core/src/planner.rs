@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Error};
 use culpa::{throw, throws};
 
-use crate::foods::{parse_food, FoodName, FOODS};
+use crate::foods::{FoodName, FOODS};
 use crate::needs::{scale, Profile};
 use crate::nutrient::Nutrient;
 use crate::recipe::{
@@ -244,6 +244,6 @@ pub fn plan(request: &PlanRequest) -> PlanResult {
 /// Resolve a user-supplied food name to its canonical name.
 #[throws(Error)]
 pub fn resolve_food(name: &str) -> FoodName {
-    parse_food(name)
+    FoodName::parse(name)
         .ok_or_else(|| anyhow!("Unknown food {name:?}; call list_foods for valid names"))?
 }
