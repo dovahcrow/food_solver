@@ -180,6 +180,140 @@ fn csc_from_rows(nrows: usize, ncols: usize, rows: &[Row]) -> CscMatrix<f64> {
 }
 
 /// Solve the batch problem.
+///
+/// # The original problem
+///
+/// Let `x_j` be the batch grams of food `j` (`n` foods, one variable each), and
+/// let `h_i` be the nutrient-`i` density row, i.e. the grams of nutrient `i`
+/// (joules for energy) each food supplies per gram. Then the batch supplies
+/// `y_i = h_i · x` of nutrient `i`. Every required nutrient has a minimum `L_i`
+/// and an optional explicit maximum `U_i`, and every food has a gram range
+/// `[lower_j, upper_j]` that pins the weight when the two ends are equal.
+///
+/// The recipe we want is the one that best meets those requirements:
+///
+/// ```text
+/// minimize   Σ_i soft_loss_i(y_i)  +  Σ_j 0.05 · (x_j / upper_j)²
+///
+/// subject to y_i >= L_i                       for each HARD requirement
+///            y_i <= U_i                       for each HARD requirement with a maximum
+///            lower_j <= x_j <= upper_j        for every food
+///            L_r <= (N_r·x) / (D_r·x) <= U_r  for every nutrient ratio
+/// ```
+///
+/// with the relative-boundary loss
+///
+/// ```text
+/// soft_loss_i(y) = max(0, 1 - y/L_i)² + max(0, y/U_i - 1)²
+/// ```
+///
+/// where `U_i` is the explicit maximum or, for an open-ended minimum, the
+/// implicit preference `multiplier · L_i`. A shortage is measured against
+/// `L_i`, an excess against `U_i`, and the whole interval `[L_i, U_i]` costs
+/// nothing, so the loss is zero at both ends and inside it. The small
+/// `0.05 · (x_j / upper_j)²` term does not encode a requirement at all: it only
+/// breaks ties between otherwise equivalent recipes in favour of using less of
+/// a `minimize_usage` ingredient.
+///
+/// This is a convex quadratic program, not a linear one: each `soft_loss_i` is a
+/// convex, non-negative, non-decreasing function of the linear form `y_i`, and
+/// every constraint is linear. `max(0, ·)` preserves convexity here because the
+/// squaring is monotone on the non-negative side, and sums and non-negative
+/// scalings of convex functions stay convex.
+///
+/// # Clarabel's standard form
+///
+/// [Clarabel] solves
+///
+/// ```text
+/// minimize   (1/2) z'Pz + q'z
+/// subject to A z + s = b,   s ∈ K
+/// ```
+///
+/// `z` are the free primal variables, `P` is symmetric positive semidefinite
+/// (the quadratic part), `q` is the linear part, and the slack `s` must land in
+/// the cone `K`. With `K` the non-negative orthant `R_+^m`, the constraint is
+/// exactly the elementwise inequality `A z <= b` (the slack is `b - A z`), so
+/// any `A z <= b` system maps over once the objective is in `(1/2) z'Pz + q'z`
+/// shape. This formulation has no linear term in the recipe objective, so
+/// `q = 0` and everything lives in `P`.
+///
+/// # Converting the recipe problem
+///
+/// A squared `max(0, ·)` is not linear, but it becomes a squared *variable* on
+/// the left of a linear row. Add one auxiliary variable per soft-loss side:
+///
+/// ```text
+/// shortage  s_i >= 1 - y_i/L_i   contributes  s_i²
+/// excess    t_i >= y_i/U_i - 1   contributes  t_i²
+/// ```
+///
+/// and write them as rows of `A z <= b` in `z = [x, s…, t…]`:
+///
+/// ```text
+/// -h_i/L_i · x - s_i <= -1     ⇒  s_i = max(0, 1 - y_i/L_i) at the optimum
+///  h_i/U_i · x - t_i <=  1     ⇒  t_i = max(0, y_i/U_i - 1) at the optimum
+/// ```
+///
+/// At the optimum each auxiliary sits exactly on `max(0, ·)`. The rows permit
+/// the auxiliary to reach that value, and `s_i²`, `t_i²` increase with their
+/// arguments on the non-negative side, so minimising the square pins the
+/// variable to the smallest value the row allows — which is `max(0, ·)`. That
+/// is why no extra `s_i >= 0` / `t_i >= 0` rows are needed: the squared cost
+/// does that work, and the `Python` reference uses the same trick (`cp.pos`).
+/// The food variables and the auxiliaries are therefore all free in Clarabel;
+/// the non-negativity lives in the cone applied to the slack, and the row
+/// `x_j >= lower_j >= 0` re-establishes `x_j >= 0`.
+///
+/// In this `z`, with `P` diagonal:
+///
+/// ```text
+/// P = diag( 0.1/upper_j² for the foods, 2 for every shortage, 2 for every excess )
+/// q = 0
+/// ```
+///
+/// `P_ss = 2` makes `(1/2) z'Pz` contribute `s²`, i.e. the loss exactly. The
+/// `0.05·(x_j/upper_j)²` preference becomes `P_jj = 0.1/upper_j²`, because
+/// `(1/2)·(0.1/upper_j²)·x² = 0.05·(x/upper_j)²`. (The Python CVXPY reference
+/// assembles `P[j,j] += 0.1/ub²` for the same reason; CVXPY then generates the
+/// distance from the objective it was given, so the two formulations agree.)
+///
+/// The remaining rows are linear and need no auxiliaries:
+///
+/// ```text
+/// -x_j            <= -lower_j      food lower bound (also x_j >= 0 when lower_j = 0)
+///  x_j            <=  upper_j      food upper bound
+/// -h_i/Ln · x     <= -L_i/Ln       HARD minimum
+///  h_i/Ln · x     <=  U_i/Ln       HARD explicit maximum
+/// -(N_r - L_r·D_r)·x <= 0          ratio minimum
+///  (N_r - U_r·D_r)·x <= 0          ratio maximum
+/// ```
+///
+/// The HARD rows are divided by `Ln = max(L_i, U_i, max_j |h_ij|)`, which
+/// rescales the row without moving the feasible set but keeps energy (millions
+/// of joules) and trace nutrients (micrograms) in a comparable numeric range
+/// for the interior-point iterations. The ratio rows come from clearing the
+/// denominator: `L_r <= (N_r·x)/(D_r·x) <= U_r` with `D_r·x > 0` is the pair
+/// `L_r·D_r·x <= N_r·x` and `N_r·x <= U_r·D_r·x`, two linear rows (the
+/// denominator keeps its own positive absolute requirement, so it cannot be
+/// zero). Both food bounds and requirements are batch quantities, so the batch
+/// day count never enters the solver — the frontends scale the requirements
+/// before calling, not here.
+///
+/// `csc_from_rows` assembles the collected rows into the compressed sparse
+/// column matrix Clarabel wants, `b` is the right-hand side, and the single
+/// `NonnegativeConeT(rows)` cone is the non-negative orthant. The solution's
+/// `x` is sliced back to the first `n` entries to drop the auxiliaries, giving
+/// the batch grams only.
+///
+/// # Returns
+///
+/// `grams` is `Some` only for an optimal solve, so an infeasible or failed
+/// solve cannot leak a stale recipe. `SolveStatus::Infeasible` folds in
+/// Clarabel's `AlmostPrimalInfeasible`; every other status is passed through by
+/// name in `SolveStatus::Other`.
+///
+/// [Clarabel]: https://github.com/oxfordcontrol/Clarabel.rs
 #[throws(Error)]
 pub fn solve(problem: &Problem) -> Solution {
     let foods = &problem.foods;

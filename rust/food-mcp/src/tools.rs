@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 
 use food_core::{
     dog_needs, parse_food, plan, scale, IngredientSpec, NeedRequired, NeedSoftness, PlanRequest,
-    Profile, FOOD_NAMES, MAX_DAYS,
+    PlanResult, Profile, FOOD_NAMES, MAX_DAYS,
 };
+use serde_json::{to_string_pretty, Value};
 
 /// One ingredient of the batch.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -38,13 +39,10 @@ pub struct SolveRequest {
     /// Ingredients of the batch with their weights in grams.
     pub ingredients: Vec<Ingredient>,
     /// Days the batch covers; scales the nutrient requirements.
-    #[serde(default = "one")]
     pub days: u32,
     /// Dog body weight in kg.
-    #[serde(default = "seven")]
     pub weight: f64,
     /// Dog age in years; adults only (>= 1).
-    #[serde(default = "three")]
     pub age: f64,
     /// False: 95 kcal/kg^0.75 profile. True: 110 profile for ordinary
     /// activity, not working dogs.
@@ -62,15 +60,6 @@ pub struct SolveRequest {
     pub detail: bool,
 }
 
-fn one() -> u32 {
-    1
-}
-fn three() -> f64 {
-    3.0
-}
-fn seven() -> f64 {
-    7.0
-}
 fn default_multiplier() -> Option<f64> {
     Some(1.5)
 }
@@ -78,13 +67,10 @@ fn default_multiplier() -> Option<f64> {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct NeedsRequest {
     /// Body weight in kg.
-    #[serde(default = "seven")]
     pub weight: f64,
     /// Days the batch covers.
-    #[serde(default = "one")]
     pub days: u32,
     /// Age in years; adults only (>= 1).
-    #[serde(default = "three")]
     pub age: f64,
     /// False: 95 kcal/kg^0.75 profile. True: 110 profile.
     #[serde(default)]
@@ -117,6 +103,14 @@ impl FoodSolver {
     /// List every food the solver knows.
     #[tool(name = "list_foods", description = "List every food the solver knows.")]
     pub fn list_foods(&self) -> Result<String, String> {
+        /// Every food the solver knows.
+        #[throws(Error)]
+        fn list_foods_payload() -> String {
+            to_json(&serde_json::json!({
+                "count": FOOD_NAMES.len(),
+                "foods": FOOD_NAMES,
+            }))?
+        }
         render(list_foods_payload())
     }
 
@@ -144,6 +138,13 @@ impl FoodSolver {
         &self,
         Parameters(request): Parameters<SolveRequest>,
     ) -> Result<String, String> {
+        /// Solve one batch and serialise its recipe and nutrient report.
+        #[throws(Error)]
+        fn solve_recipe_payload(request: &SolveRequest) -> String {
+            let plan_request = build_plan_request(request)?;
+            let result = plan(&plan_request)?;
+            to_json(&format_plan_result(&plan_request, &result, request.detail))?
+        }
         render(solve_recipe_payload(&request))
     }
 }
@@ -153,15 +154,6 @@ impl FoodSolver {
 /// only `String`, `ContentBlock`, `()` and its own error types implement.
 fn render(result: Result<String, Error>) -> Result<String, String> {
     result.map_err(|error| error.to_string())
-}
-
-/// Every food the solver knows.
-#[throws(Error)]
-fn list_foods_payload() -> String {
-    to_json(&serde_json::json!({
-        "count": FOOD_NAMES.len(),
-        "foods": FOOD_NAMES,
-    }))?
 }
 
 /// Scaled requirement table for one profile.
@@ -196,17 +188,9 @@ fn get_needs_payload(request: &NeedsRequest) -> String {
     }))?
 }
 
-/// Solve one batch and serialise its recipe and nutrient report.
-#[throws(Error)]
-fn solve_recipe_payload(request: &SolveRequest) -> String {
-    let plan_request = build_request(request)?;
-    let result = plan(&plan_request)?;
-    to_json(&plan_payload(&result, &plan_request, request.detail))?
-}
-
 /// Validate and translate the tool request into a planning request.
 #[throws(Error)]
-fn build_request(request: &SolveRequest) -> PlanRequest {
+fn build_plan_request(request: &SolveRequest) -> PlanRequest {
     if request.days == 0 || request.days > MAX_DAYS {
         throw!(anyhow!("days must be between 1 and {MAX_DAYS}"));
     }
@@ -250,9 +234,9 @@ fn build_request(request: &SolveRequest) -> PlanRequest {
 }
 
 /// Serialise a solved plan into the tool's structured payload.
-fn plan_payload(
-    result: &food_core::PlanResult,
+fn format_plan_result(
     request: &PlanRequest,
+    result: &PlanResult,
     detail: bool,
 ) -> serde_json::Value {
     let recipe: Vec<serde_json::Value> = result
@@ -354,8 +338,8 @@ fn round9(value: f64) -> f64 {
 }
 
 #[throws(Error)]
-fn to_json(value: &serde_json::Value) -> String {
-    serde_json::to_string_pretty(value)?
+fn to_json(value: &Value) -> String {
+    to_string_pretty(value)?
 }
 
 #[tool_handler(router = self.tool_router)]

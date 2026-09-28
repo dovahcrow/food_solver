@@ -1,6 +1,16 @@
-# Python reference frontends (kept for data refresh and cross-checking).
+# Python reference frontends (kept for cross-checking the Rust solver).
 opt +ARGS="":
   uv run python -m src opt {{ARGS}}
+
+# Refresh the food caches the Rust table embeds. With no FOOD args, fetches
+# every food that has a remote source; name foods to refresh just those.
+# e.g. `just refresh-foods PORK BEEF`, `just refresh-foods --list`.
+refresh-foods +ARGS="":
+  cargo run --quiet --release --bin food -- fetch {{ARGS}}
+
+# Same, but through the Python reference frontend.
+refresh-foods-py +ARGS="":
+  uv run python -m src refresh-foods {{ARGS}}
 
 # Rust workspace: lib + CLI + MCP server.
 build:

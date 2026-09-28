@@ -2,13 +2,19 @@
 //!
 //! |Flow| Batch ingredient weights plus a day count go in; a solved recipe and
 //! its per-day nutrient report come out.
+//!
+//! The solver is the default command, so `food -d 10 -i RICE:500` solves a
+//! batch directly. `food fetch` refreshes the `foods/*.json` caches the table
+//! is built from, ported from the Python getters.
 
+mod fetch;
 mod format;
 
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::{anyhow, Error};
-use clap::{ArgAction, Parser};
+use clap::{ArgAction, Parser, Subcommand};
 use culpa::{throw, throws};
 use food_core::{
     parse_food, plan, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus, FOODS,
@@ -25,15 +31,35 @@ mod color {
     pub const LIGHT_YELLOW: &str = "\x1b[93m";
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(
     name = "food",
-    about = "Solve dog food batches from ingredient amounts and a day count.",
-    long_about = "Solve a batch from the ingredients given with --ingredient.\n\n\
-                  With no --ingredient the CLI reproduces the historical CELERY, \
-                  JIANGDOU, PORK, RICE, CANOLA_OIL, SALT, EGG_SHELL_POWDER and EGG batch."
+    about = "Solve dog food batches and refresh the food database.",
+    long_about = "Solve a batch from the ingredients given with --ingredient, or \
+                  refresh the food data the solver embeds with `food fetch`.\n\n\
+                  With no --ingredient the solve command reproduces the historical \
+                  CELERY, JIANGDOU, PORK, RICE, CANOLA_OIL, SALT, EGG_SHELL_POWDER \
+                  and EGG batch."
 )]
 struct Cli {
+    #[command(subcommand)]
+    cmd: Option<Command>,
+
+    #[command(flatten)]
+    solve: CmdSolve,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Solve a batch (the default when no subcommand is given).
+    Solve(CmdSolve),
+    /// Download food nutrient caches from USDA and the China Food tables.
+    Fetch(CmdFetch),
+}
+
+/// Solve a batch from ingredient amounts and a day count.
+#[derive(Parser, Debug)]
+struct CmdSolve {
     /// Number of days the batch covers; scales the requirements.
     #[arg(short = 'd', long = "day", default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..))]
     day: u32,
@@ -67,6 +93,150 @@ struct Cli {
     /// List every food the solver knows and exit.
     #[arg(long, default_value_t = false, action = ArgAction::Set)]
     foods: bool,
+}
+
+/// Fetch food nutrient caches.
+#[derive(Parser, Debug)]
+struct CmdFetch {
+    /// Foods to refresh, e.g. PORK BEEF. Case-insensitive; default is all.
+    #[arg(value_name = "FOOD")]
+    foods: Vec<String>,
+
+    /// Cache directory; overrides FOODS_DIR.
+    #[arg(long, value_name = "DIR")]
+    dir: Option<PathBuf>,
+
+    /// Print what would be fetched without writing anything.
+    #[arg(long, default_value_t = false)]
+    dry_run: bool,
+
+    /// List the fetchable foods and exit.
+    #[arg(long, default_value_t = false)]
+    list: bool,
+}
+
+#[throws(Error)]
+fn main_body(cli: Cli) {
+    match cli.cmd {
+        Some(Command::Fetch(fetch)) => fetch.run()?,
+        Some(Command::Solve(solve)) => solve.run()?,
+        // No subcommand: the historical bare invocation is a solve.
+        None => cli.solve.run()?,
+    }
+}
+
+impl CmdFetch {
+    #[throws(Error)]
+    fn run(&self) {
+        if self.list {
+            for entry in fetch::CATALOG {
+                match entry.source {
+                    fetch::Source::Usda(id) => println!("{} usda {id}", entry.name),
+                    fetch::Source::Chinanutri(id) => {
+                        println!("{} chinanutri {id}", entry.name);
+                    }
+                    fetch::Source::Inline => println!("{} inline", entry.name),
+                }
+            }
+            return;
+        }
+
+        let wanted: Vec<&str> = self.foods.iter().map(String::as_str).collect();
+        let (mut chosen, unknown) = fetch::catalog::select(wanted);
+        if !unknown.is_empty() {
+            throw!(anyhow!(
+                "unknown food(s): {}; run `food fetch --list`",
+                unknown.join(", ")
+            ));
+        }
+        // Without explicit names, everything except the inline-only foods.
+        if chosen.is_empty() {
+            chosen = fetch::CATALOG
+                .iter()
+                .filter(|entry| entry.source != fetch::Source::Inline)
+                .collect();
+        }
+
+        let directory = self.dir.clone().unwrap_or_else(fetch::foods_dir);
+        let total = chosen.len();
+        for (index, entry) in chosen.iter().enumerate() {
+            if self.dry_run {
+                println!("[{}/{}] {} (dry run)", index + 1, total, entry.name);
+                continue;
+            }
+            eprintln!("[{}/{}] fetching {}", index + 1, total, entry.name);
+            match fetch::refresh(entry, &directory) {
+                Ok(row) => {
+                    eprintln!(
+                        "    {} -> {} ({} nutrients)",
+                        row.name,
+                        entry.name,
+                        row.nutrients.len()
+                    );
+                    if !row.skipped.is_empty() {
+                        eprintln!("    skipped unmapped rows: {}", row.skipped.join(", "));
+                    }
+                }
+                // One bad page must not sink the whole run: report and continue.
+                Err(error) => eprintln!("    error: {error:#}"),
+            }
+        }
+    }
+}
+
+impl CmdSolve {
+    #[throws(Error)]
+    fn run(&self) {
+        if self.foods {
+            for name in FOOD_NAMES {
+                println!("{name}");
+            }
+            return;
+        }
+
+        let ingredients = if self.ingredient.is_empty() {
+            default_ingredients(self.day)
+        } else {
+            let mut specs = Vec::new();
+            for raw in &self.ingredient {
+                specs.push(parse_ingredient(raw)?);
+            }
+            specs
+        };
+
+        let request = PlanRequest {
+            ingredients,
+            days: self.day,
+            profile: Profile {
+                age: self.age,
+                weight: self.weight,
+                active: self.active,
+                daily_kcal: self.daily_kcal,
+            },
+            implicit_soft_upper_multiplier: Some(1.5),
+            detail: self.detail,
+        };
+        let result = plan(&request)?;
+
+        if !result.optimal {
+            println!("Solution not found");
+            return;
+        }
+
+        println!("Solution:");
+        for line in &result.recipe {
+            // Python shows two significant digits of the batch grams.
+            println!(
+                "  {} = {:.1}",
+                line.food,
+                format::two_significant(line.grams)
+            );
+        }
+        println!("Nutrition (per day):");
+        for report in &result.nutrition {
+            println!("{}", format_nutrient(report, self.detail));
+        }
+    }
 }
 
 /// Parse `FOOD:GRAMS[:optional|minimize|fixed]`.
@@ -167,67 +337,17 @@ fn format_nutrient(report: &NutrientReport, detail: bool) -> String {
         nutrient = report.nutrient.name(),
         status = report.status.as_str(),
         minimum = format::fixed2(report.minimum),
+        maximum = maximum,
         unit = report.unit,
+        upper_source = upper_source,
+        coverage = coverage,
         reset = color::RESET,
     )
 }
 
-#[throws(Error)]
-fn run(cli: Cli) {
-    if cli.foods {
-        for name in FOOD_NAMES {
-            println!("{name}");
-        }
-        return;
-    }
-
-    let ingredients = if cli.ingredient.is_empty() {
-        default_ingredients(cli.day)
-    } else {
-        let mut specs = Vec::new();
-        for raw in &cli.ingredient {
-            specs.push(parse_ingredient(raw)?);
-        }
-        specs
-    };
-
-    let request = PlanRequest {
-        ingredients,
-        days: cli.day,
-        profile: Profile {
-            age: cli.age,
-            weight: cli.weight,
-            active: cli.active,
-            daily_kcal: cli.daily_kcal,
-        },
-        implicit_soft_upper_multiplier: Some(1.5),
-        detail: cli.detail,
-    };
-    let result = plan(&request)?;
-
-    if !result.optimal {
-        println!("Solution not found");
-        return;
-    }
-
-    println!("Solution:");
-    for line in &result.recipe {
-        // Python shows two significant digits of the batch grams.
-        println!(
-            "  {} = {:.1}",
-            line.food,
-            format::two_significant(line.grams)
-        );
-    }
-    println!("Nutrition (per day):");
-    for report in &result.nutrition {
-        println!("{}", format_nutrient(report, cli.detail));
-    }
-}
-
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    match run(cli) {
+    match main_body(cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error: {error}");

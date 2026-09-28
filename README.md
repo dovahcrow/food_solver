@@ -118,10 +118,13 @@ uv sync
 所有行都参与优化，也不等于食物数据完整。新增的最低需求使用单边平方
 缺口损失，不惩罚超过最低量；其他偏好仍可与这些软需求权衡。
 
-旧 JSON 缓存不会自动多出以前被丢弃的氨基酸/脂肪酸。可以显式重新获取：
+旧 JSON 缓存不会自动多出以前被丢弃的氨基酸/脂肪酸。可以显式重新获取（Rust 或 Python 前端均可，二者产出的缓存逐字节一致）：
 
 ```sh
-.venv/bin/python -m src refresh-foods RICE EGG CHICKEN_BREAST
+just refresh-foods RICE EGG CHICKEN_BREAST   # Rust 抓取器（food fetch）
+just refresh-foods                           # 全部可抓取食材
+just refresh-foods --list                    # 列出食材及其来源
+just refresh-foods-py RICE EGG               # Python 参考实现
 ```
 
 这个命令会联网并覆盖指定食材缓存；来源本身未提供的字段仍会缺失。
@@ -140,6 +143,10 @@ uv sync
 - `rust/food-cli/`：`food` 命令。
 - `rust/food-mcp/`：`food-mcp`，把同一流程暴露成 `list_foods`、`get_needs`、
   `solve_recipe` 三个 MCP 工具。
+- `rust/food-cli/` 的 `fetch` 子命令（`food fetch`）：直接抓取 USDA 与
+  《中国食物成分表》并把结果写进 `foods/*.json`，是把 Python 的
+  `food_getters/{usda,chinanutri}.py` 原样移植过来的版本；它写出的文件与
+  Python 版逐字节相同，不再需要 Python 来更新数据。
 - `rust/food-core/build.rs`：构建时读取 `foods/*.json`（外加 Python 源码里
   三条内联配方）生成内嵌食材营养表，`src/foods.rs` 再用 `include!` 引进来。
 
@@ -164,9 +171,11 @@ CLI 支持 `-d/--day`、`--detail`、`--daily-kcal`、`--weight`、`--age`、
 
 ## Python 参考实现
 
-`src/` 仍保留为 Python 参考实现，用于抓取/更新食材数据以及和 Rust 结果对照：
-`just opt -d 10` 运行它。MCP 支持已从 Python 侧移除，只保留在 Rust 的
-`food-mcp`。食材 JSON 更新后重新构建即可（`build.rs` 会自动重新生成内嵌表）。
+`src/` 仍保留为 Python 参考实现，主要用来和 Rust 结果对照：`just opt -d 10`
+运行它，`just refresh-foods-py` 走它的食材抓取。数据抓取已由 Rust 的
+`food fetch` 覆盖（`just refresh-foods`），两个前端产出的缓存逐字节一致，
+因此更新食材数据不再依赖 Python。MCP 支持只保留在 Rust 的 `food-mcp`。
+食材 JSON 更新后重新构建即可（`build.rs` 会自动重新生成内嵌表）。
 
 ## 作为 Codex 插件使用
 

@@ -38,5 +38,5 @@ solved recipe and a per-day nutrient report for adult dogs.
 - `maximum_is_implicit` marks the solver's soft preference above an open-ended
   minimum. It is not a toxicity limit.
 - The food database is embedded in the server at build time from `foods/*.json`;
-  refresh those caches with the Python frontend and rebuild.
+  refresh those caches in the repository and rebuild.
 - This is recipe arithmetic, not veterinary advice.
