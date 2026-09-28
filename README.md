@@ -168,15 +168,15 @@ Rust 版原本与 Python 输出数值一致；缓存改为按来源取行后，�
 ```sh
 just build          # cargo build --release
 just test           # cargo test --workspace
-just run solve -d 10  # 运行 Rust CLI
+just run solve -d 10 -i PORK:500 -i RICE:700:minimize -i EGG:700:minimize -i EGG_SHELL_POWDER:16:minimize -i SALT:2:minimize  # 运行 Rust CLI
 just check          # cargo check
 just clippy         # cargo clippy（-D warnings）
 ```
 
 CLI 支持 `-d/--day`、`--detail`、`--daily-kcal`、`--weight`、`--age`、
-`--active`，以及可重复的 `-i FOOD:GRAMS[:optional|minimize|fixed]`；
-不写 `-i` 时沿用历史默认批次。`food solve --foods` 列出全部食材，
-`food fetch` 刷新食材缓存。
+`--active`，以及可重复的 `-i FOOD:GRAMS[:optional|minimize|fixed]`。
+求解时必须至少给一个 `-i`（不再有内置默认批次）。`food fetch --list`
+列出全部食材，`food fetch` 刷新食材缓存。
 
 ## Python 参考实现
 

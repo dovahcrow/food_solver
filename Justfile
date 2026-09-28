@@ -28,7 +28,7 @@ clippy:
 test:
   cargo test --workspace
 
-# Run the Rust CLI, e.g. `just run solve -d 10`.
+# Run the Rust CLI, e.g. `just run solve -d 10 -i PORK:500 -i RICE:700:minimize`.
 run +ARGS="":
   cargo run --quiet --release --bin food -- {{ARGS}}
 

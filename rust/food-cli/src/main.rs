@@ -18,8 +18,7 @@ use anyhow::{anyhow, Context, Error};
 use clap::{ArgAction, Parser, Subcommand};
 use culpa::{throw, throws};
 use food_core::{
-    parse_food, plan, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus, FOODS,
-    FOOD_NAMES,
+    parse_food, plan, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus,
 };
 
 /// ANSI colours, matching the Python frontend so output stays comparable.
@@ -37,10 +36,7 @@ mod color {
     name = "food",
     about = "Solve dog food batches and refresh the food database.",
     long_about = "Solve a batch with `food solve`, or refresh the food data the \
-                  solver embeds with `food fetch`.\n\n\
-                  With no --ingredient the solve command reproduces the historical \
-                  CELERY, JIANGDOU, PORK, RICE, CANOLA_OIL, SALT, EGG_SHELL_POWDER \
-                  and EGG batch."
+                  solver embeds with `food fetch`."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -87,12 +83,13 @@ struct CmdSolve {
     /// Add an ingredient as FOOD:GRAMS[:optional]. A fixed weight must be used
     /// exactly; an optional one may be any amount up to GRAMS. Repeat per
     /// ingredient; `minimize` marks an optional ingredient to use minimally.
-    #[arg(short = 'i', long = "ingredient", value_name = "FOOD:GRAMS[:optional]")]
+    #[arg(
+        short = 'i',
+        long = "ingredient",
+        value_name = "FOOD:GRAMS[:optional]",
+        required = true
+    )]
     ingredient: Vec<IngredientInput>,
-
-    /// List every food the solver knows and exit.
-    #[arg(long)]
-    foods: bool,
 }
 
 /// Fetch food nutrient caches.
@@ -278,18 +275,8 @@ impl CmdExpandSrLegacy {
 impl CmdSolve {
     #[throws(Error)]
     fn run(&self) {
-        if self.foods {
-            for name in FOOD_NAMES {
-                println!("{name}");
-            }
-            return;
-        }
-
-        let ingredients = if self.ingredient.is_empty() {
-            default_ingredients(self.day)
-        } else {
-            self.ingredient.iter().map(|item| item.spec()).collect()
-        };
+        let ingredients: Vec<IngredientSpec> =
+            self.ingredient.iter().map(|item| item.spec()).collect();
 
         let request = PlanRequest {
             ingredients,
@@ -371,7 +358,7 @@ impl FromStr for IngredientInput {
             ));
         }
         let food = parse_food(parts[0])
-            .ok_or_else(|| format!("Unknown food {:?}; run `food solve --foods`", parts[0]))?;
+            .ok_or_else(|| format!("Unknown food {:?}; run `food fetch --list`", parts[0]))?;
         let grams: f64 = parts[1]
             .parse()
             .map_err(|_| format!("{:?} is not a number of grams", parts[1]))?;
@@ -390,21 +377,6 @@ impl FromStr for IngredientInput {
         };
         Ok(Self { food, grams, kind })
     }
-}
-
-/// The reference batch used when no --ingredient is given.
-fn default_ingredients(day: u32) -> Vec<IngredientSpec> {
-    let scale = f64::from(day);
-    vec![
-        IngredientSpec::fixed("CELERY", 245.0),
-        IngredientSpec::fixed("JIANGDOU", 411.0),
-        IngredientSpec::fixed("PORK", 500.0),
-        IngredientSpec::minimize("RICE", 1000.0 * scale),
-        IngredientSpec::minimize("CANOLA_OIL", 5.0 * scale),
-        IngredientSpec::minimize("SALT", 2.0 * scale),
-        IngredientSpec::minimize("EGG_SHELL_POWDER", 5.0 * scale),
-        IngredientSpec::minimize("EGG", 100.0 * scale),
-    ]
 }
 
 fn color_for(report: &NutrientReport) -> &'static str {
@@ -479,10 +451,4 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-/// Keep the embedded table linked even when only names are printed.
-#[allow(dead_code)]
-fn _touch() -> usize {
-    FOODS.len()
 }
