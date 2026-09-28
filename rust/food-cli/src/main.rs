@@ -3,15 +3,16 @@
 //! |Flow| Batch ingredient weights plus a day count go in; a solved recipe and
 //! its per-day nutrient report come out.
 //!
-//! The solver is the default command, so `food -d 10 -i RICE:500` solves a
-//! batch directly. `food fetch` refreshes the `foods/*.json` caches the table
-//! is built from, ported from the Python getters.
+//! `food solve -d 10 -i RICE:500` solves a batch; `food fetch` refreshes the
+//! `foods/*.json` caches the table is built from, ported from the Python
+//! getters.
 
 mod fetch;
 mod format;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Error};
 use clap::{ArgAction, Parser, Subcommand};
@@ -35,23 +36,20 @@ mod color {
 #[command(
     name = "food",
     about = "Solve dog food batches and refresh the food database.",
-    long_about = "Solve a batch from the ingredients given with --ingredient, or \
-                  refresh the food data the solver embeds with `food fetch`.\n\n\
+    long_about = "Solve a batch with `food solve`, or refresh the food data the \
+                  solver embeds with `food fetch`.\n\n\
                   With no --ingredient the solve command reproduces the historical \
                   CELERY, JIANGDOU, PORK, RICE, CANOLA_OIL, SALT, EGG_SHELL_POWDER \
                   and EGG batch."
 )]
 struct Cli {
     #[command(subcommand)]
-    cmd: Option<Command>,
-
-    #[command(flatten)]
-    solve: CmdSolve,
+    cmd: Command,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// Solve a batch (the default when no subcommand is given).
+    /// Solve a batch from ingredient amounts and a day count.
     Solve(CmdSolve),
     /// Download food nutrient caches from USDA and the China Food tables.
     Fetch(CmdFetch),
@@ -90,10 +88,10 @@ struct CmdSolve {
     /// exactly; an optional one may be any amount up to GRAMS. Repeat per
     /// ingredient; `minimize` marks an optional ingredient to use minimally.
     #[arg(short = 'i', long = "ingredient", value_name = "FOOD:GRAMS[:optional]")]
-    ingredient: Vec<String>,
+    ingredient: Vec<IngredientInput>,
 
     /// List every food the solver knows and exit.
-    #[arg(long, default_value_t = false, action = ArgAction::Set)]
+    #[arg(long)]
     foods: bool,
 }
 
@@ -120,11 +118,9 @@ struct CmdFetch {
 #[throws(Error)]
 fn main_body(cli: Cli) {
     match cli.cmd {
-        Some(Command::Fetch(fetch)) => fetch.run()?,
-        Some(Command::ExpandSrLegacy(expand)) => expand.run()?,
-        Some(Command::Solve(solve)) => solve.run()?,
-        // No subcommand: the historical bare invocation is a solve.
-        None => cli.solve.run()?,
+        Command::Solve(solve) => solve.run()?,
+        Command::Fetch(fetch) => fetch.run()?,
+        Command::ExpandSrLegacy(expand) => expand.run()?,
     }
 }
 
@@ -292,11 +288,7 @@ impl CmdSolve {
         let ingredients = if self.ingredient.is_empty() {
             default_ingredients(self.day)
         } else {
-            let mut specs = Vec::new();
-            for raw in &self.ingredient {
-                specs.push(parse_ingredient(raw)?);
-            }
-            specs
+            self.ingredient.iter().map(|item| item.spec()).collect()
         };
 
         let request = PlanRequest {
@@ -334,31 +326,69 @@ impl CmdSolve {
     }
 }
 
-/// Parse `FOOD:GRAMS[:optional|minimize|fixed]`.
-#[throws(Error)]
-fn parse_ingredient(spec: &str) -> IngredientSpec {
-    let parts: Vec<&str> = spec.split(':').collect();
-    if parts.len() < 2 || parts.len() > 3 {
-        throw!(anyhow!(
-            "{spec:?} must be FOOD:GRAMS or FOOD:GRAMS:optional"
-        ));
+/// One `-i` argument: `FOOD:GRAMS[:optional|minimize|fixed]`.
+///
+/// Parsed by clap through [`FromStr`], so a `CmdSolve` holds ingredients
+/// already understood rather than raw strings.
+#[derive(Debug, Clone, Copy)]
+struct IngredientInput {
+    food: &'static str,
+    grams: f64,
+    kind: IngredientKind,
+}
+
+/// How an ingredient's weight is constrained.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IngredientKind {
+    /// The weight must be used exactly.
+    Fixed,
+    /// Any amount from 0 up to the weight.
+    Optional,
+    /// Optional, and prefer less of it among otherwise equivalent recipes.
+    Minimize,
+}
+
+impl IngredientInput {
+    /// The solver spec this argument describes.
+    fn spec(self) -> IngredientSpec {
+        match self.kind {
+            IngredientKind::Fixed => IngredientSpec::fixed(self.food, self.grams),
+            IngredientKind::Optional => IngredientSpec::optional_upto(self.food, self.grams),
+            IngredientKind::Minimize => IngredientSpec::minimize(self.food, self.grams),
+        }
     }
-    let food = parse_food(parts[0])
-        .ok_or_else(|| anyhow!("Unknown food {:?}; run `food --foods`", parts[0]))?;
-    let grams: f64 = parts[1]
-        .parse()
-        .map_err(|_| anyhow!("{:?} is not a number of grams", parts[1]))?;
-    if !grams.is_finite() || grams < 0.0 {
-        throw!(anyhow!("grams must be a non-negative number"));
-    }
-    if parts.len() == 2 {
-        return IngredientSpec::fixed(food, grams);
-    }
-    match parts[2].to_ascii_lowercase().as_str() {
-        "optional" | "opt" | "true" | "1" | "yes" => IngredientSpec::optional_upto(food, grams),
-        "minimize" | "min" => IngredientSpec::minimize(food, grams),
-        "fixed" | "false" | "0" | "no" => IngredientSpec::fixed(food, grams),
-        other => throw!(anyhow!("{other:?} is not optional, minimize or fixed")),
+}
+
+impl FromStr for IngredientInput {
+    type Err = String;
+
+    /// Parse `FOOD:GRAMS[:optional|minimize|fixed]`.
+    fn from_str(spec: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = spec.split(':').collect();
+        if parts.len() < 2 || parts.len() > 3 {
+            return Err(format!(
+                "{spec:?} must be FOOD:GRAMS or FOOD:GRAMS:optional"
+            ));
+        }
+        let food = parse_food(parts[0])
+            .ok_or_else(|| format!("Unknown food {:?}; run `food solve --foods`", parts[0]))?;
+        let grams: f64 = parts[1]
+            .parse()
+            .map_err(|_| format!("{:?} is not a number of grams", parts[1]))?;
+        if !grams.is_finite() || grams < 0.0 {
+            return Err("grams must be a non-negative number".to_string());
+        }
+        let kind = if parts.len() == 2 {
+            IngredientKind::Fixed
+        } else {
+            match parts[2].to_ascii_lowercase().as_str() {
+                "optional" | "opt" | "true" | "1" | "yes" => IngredientKind::Optional,
+                "minimize" | "min" => IngredientKind::Minimize,
+                "fixed" | "false" | "0" | "no" => IngredientKind::Fixed,
+                other => return Err(format!("{other:?} is not optional, minimize or fixed")),
+            }
+        };
+        Ok(Self { food, grams, kind })
     }
 }
 
