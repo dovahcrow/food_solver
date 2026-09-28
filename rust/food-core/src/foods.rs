@@ -1,11 +1,10 @@
 //! Embedded food composition data.
 //!
 //! `build.rs` embeds every cached row — one per food per source — from
-//! `foods/{FOOD}_{Source}.json` plus the three inline recipes. Callers only
-//! ever pass a food name; [`chosen_source`] maps that name to the source the
-//! solver should use, and [`food`] returns the matching row. Values are the
-//! solver's base units: grams per gram of food, with `ENERGY` in joules per
-//! gram.
+//! `foods/{FOOD}_{Source}.json` plus the three inline recipes. Callers name a
+//! food with [`FoodName`]; [`chosen_source`] maps it to the source the solver
+//! should use, and [`FOODS`] returns the matching row. Values are the solver's
+//! base units: grams per gram of food, with `ENERGY` in joules per gram.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -144,93 +143,123 @@ impl Food {
 
 include!(concat!(env!("OUT_DIR"), "/foods_data.rs"));
 
+/// `FoodName` prints as its canonical name, so reports and JSON stay readable.
+impl std::fmt::Display for FoodName {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.name())
+    }
+}
+
+/// Serialise a `FoodName` as its canonical name string.
+impl serde::Serialize for FoodName {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
+/// `FoodSource` prints as its file-name tag.
+impl std::fmt::Display for FoodSource {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.name())
+    }
+}
+
+/// Serialise a `FoodSource` as its tag string.
+impl serde::Serialize for FoodSource {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
 /// Which source each food uses, hardcoded here.
 ///
 /// One entry per food, so the choice lives in exactly one place. `build.rs`
 /// embeds every source's row and this table decides which one a run reads.
-pub const CHOOSE: &[(&str, &str)] = &[
-    ("BAICAI", "Chinanutri"),
-    ("BALANCEIT", "Inline"),
-    ("BANANA", "SrLegacy"),
-    ("BARF", "Inline"),
-    ("BASA_FISH", "Chinanutri"),
-    ("BEEF", "SrLegacy"),
-    ("BEEN_SPROUT", "Chinanutri"),
-    ("BELL_PEPER", "SrLegacy"),
-    ("BOCAI", "Chinanutri"),
-    ("BOKCHOY", "SrLegacy"),
-    ("BROCCOLI", "SrLegacy"),
-    ("CABBAGE", "SrLegacy"),
-    ("CANOLA_OIL", "Chinanutri"),
-    ("CARROT", "SrLegacy"),
-    ("CELERY", "SrLegacy"),
-    ("CHICKEN_BREAST", "SrLegacy"),
-    ("CHICKEN_GIZZARD", "Chinanutri"),
-    ("CHICKEN_HEART", "Chinanutri"),
-    ("CHICKEN_LIVER", "Chinanutri"),
-    ("CHICKEN_THIGH", "SrLegacy"),
-    ("CHINESE_LETTUS", "Chinanutri"),
-    ("CUCUMBER", "SrLegacy"),
-    ("DUCK_GIZZARD", "Chinanutri"),
-    ("EGG", "SrLegacy"),
-    ("EGGPLANT", "SrLegacy"),
-    ("EGG_SHELL_POWDER", "Inline"),
-    ("FUGUA", "Chinanutri"),
-    ("JIANGDOU", "Chinanutri"),
-    ("JIEGUA", "Chinanutri"),
-    ("JUANXINCAI", "Chinanutri"),
-    ("KONGXINCAI", "Chinanutri"),
-    ("KUIGUA", "Chinanutri"),
-    ("LUOBO", "Chinanutri"),
-    ("OYSTER", "Chinanutri"),
-    ("PORK", "Chinanutri"),
-    ("PORK_FAT", "Chinanutri"),
-    ("PORK_HEART", "Chinanutri"),
-    ("PORK_INTESTINE", "Chinanutri"),
-    ("PORK_LIVER", "Chinanutri"),
-    ("PORK_TONGUE", "Chinanutri"),
-    ("POTATO", "SrLegacy"),
-    ("PUMPKIN", "Chinanutri"),
-    ("QINCAI", "Chinanutri"),
-    ("RICE", "SrLegacy"),
-    ("SALT", "Chinanutri"),
-    ("SHANYAO", "Chinanutri"),
-    ("SHITAKE", "Chinanutri"),
-    ("SIGUA", "Chinanutri"),
-    ("SIJIDOU", "Chinanutri"),
-    ("SOYBEAN_GREEN", "Chinanutri"),
-    ("SOY_MILK", "SrLegacy"),
-    ("SWEET_POTATO", "SrLegacy"),
-    ("TOFU_FIRM", "Chinanutri"),
-    ("TOFU_SOFT", "Chinanutri"),
-    ("TOMATO", "Chinanutri"),
-    ("WHITE_MUSHROOM", "Chinanutri"),
-    ("WINTER_MELON", "Chinanutri"),
-    ("ZIGANLAN", "Chinanutri"),
-    ("ZUCCHINI", "SrLegacy"),
+pub const CHOOSE: &[(FoodName, FoodSource)] = &[
+    (FoodName::BAICAI, FoodSource::Chinanutri),
+    (FoodName::BALANCEIT, FoodSource::Inline),
+    (FoodName::BANANA, FoodSource::SrLegacy),
+    (FoodName::BARF, FoodSource::Inline),
+    (FoodName::BASA_FISH, FoodSource::Chinanutri),
+    (FoodName::BEEF, FoodSource::SrLegacy),
+    (FoodName::BEEN_SPROUT, FoodSource::Chinanutri),
+    (FoodName::BELL_PEPER, FoodSource::SrLegacy),
+    (FoodName::BOCAI, FoodSource::Chinanutri),
+    (FoodName::BOKCHOY, FoodSource::SrLegacy),
+    (FoodName::BROCCOLI, FoodSource::SrLegacy),
+    (FoodName::CABBAGE, FoodSource::SrLegacy),
+    (FoodName::CANOLA_OIL, FoodSource::Chinanutri),
+    (FoodName::CARROT, FoodSource::SrLegacy),
+    (FoodName::CELERY, FoodSource::SrLegacy),
+    (FoodName::CHICKEN_BREAST, FoodSource::SrLegacy),
+    (FoodName::CHICKEN_GIZZARD, FoodSource::Chinanutri),
+    (FoodName::CHICKEN_HEART, FoodSource::Chinanutri),
+    (FoodName::CHICKEN_LIVER, FoodSource::Chinanutri),
+    (FoodName::CHICKEN_THIGH, FoodSource::SrLegacy),
+    (FoodName::CHINESE_LETTUS, FoodSource::Chinanutri),
+    (FoodName::CUCUMBER, FoodSource::SrLegacy),
+    (FoodName::DUCK_GIZZARD, FoodSource::Chinanutri),
+    (FoodName::EGG, FoodSource::SrLegacy),
+    (FoodName::EGGPLANT, FoodSource::SrLegacy),
+    (FoodName::EGG_SHELL_POWDER, FoodSource::Inline),
+    (FoodName::FUGUA, FoodSource::Chinanutri),
+    (FoodName::JIANGDOU, FoodSource::Chinanutri),
+    (FoodName::JIEGUA, FoodSource::Chinanutri),
+    (FoodName::JUANXINCAI, FoodSource::Chinanutri),
+    (FoodName::KONGXINCAI, FoodSource::Chinanutri),
+    (FoodName::KUIGUA, FoodSource::Chinanutri),
+    (FoodName::LUOBO, FoodSource::Chinanutri),
+    (FoodName::OYSTER, FoodSource::Chinanutri),
+    (FoodName::PORK, FoodSource::Chinanutri),
+    (FoodName::PORK_FAT, FoodSource::Chinanutri),
+    (FoodName::PORK_HEART, FoodSource::Chinanutri),
+    (FoodName::PORK_INTESTINE, FoodSource::Chinanutri),
+    (FoodName::PORK_LIVER, FoodSource::Chinanutri),
+    (FoodName::PORK_TONGUE, FoodSource::Chinanutri),
+    (FoodName::POTATO, FoodSource::SrLegacy),
+    (FoodName::PUMPKIN, FoodSource::Chinanutri),
+    (FoodName::QINCAI, FoodSource::Chinanutri),
+    (FoodName::RICE, FoodSource::SrLegacy),
+    (FoodName::SALT, FoodSource::Chinanutri),
+    (FoodName::SHANYAO, FoodSource::Chinanutri),
+    (FoodName::SHITAKE, FoodSource::Chinanutri),
+    (FoodName::SIGUA, FoodSource::Chinanutri),
+    (FoodName::SIJIDOU, FoodSource::Chinanutri),
+    (FoodName::SOYBEAN_GREEN, FoodSource::Chinanutri),
+    (FoodName::SOY_MILK, FoodSource::SrLegacy),
+    (FoodName::SWEET_POTATO, FoodSource::SrLegacy),
+    (FoodName::TOFU_FIRM, FoodSource::Chinanutri),
+    (FoodName::TOFU_SOFT, FoodSource::Chinanutri),
+    (FoodName::TOMATO, FoodSource::Chinanutri),
+    (FoodName::WHITE_MUSHROOM, FoodSource::Chinanutri),
+    (FoodName::WINTER_MELON, FoodSource::Chinanutri),
+    (FoodName::ZIGANLAN, FoodSource::Chinanutri),
+    (FoodName::ZUCCHINI, FoodSource::SrLegacy),
 ];
 
 /// The source the solver uses for a food.
-pub fn chosen_source(food: &str) -> Option<&'static str> {
+pub fn chosen_source(food: FoodName) -> FoodSource {
     CHOOSE
         .iter()
         .find(|(name, _)| *name == food)
         .map(|(_, source)| *source)
+        .expect("every food has a CHOOSE entry")
 }
 
 /// The food table keyed by canonical name, holding each food's chosen row.
 ///
 /// Built once from the generated `(food, source, row)` triples: every source is
 /// embedded, and [`CHOOSE`] picks the one that fills the table.
-pub static FOODS: LazyLock<HashMap<&'static str, Food>> = LazyLock::new(|| {
-    FOOD_NAMES
-        .iter()
-        .filter_map(|name| {
-            let source = chosen_source(name)?;
-            FOOD_ROWS
+pub static FOODS: LazyLock<HashMap<FoodName, Food>> = LazyLock::new(|| {
+    ALL.iter()
+        .map(|&food| {
+            let source = chosen_source(food);
+            let row = FOOD_ROWS
                 .iter()
-                .find(|(food, tag, _)| food == name && *tag == source)
-                .map(|(name, _, row)| (*name, *row))
+                .find(|(name, tag, _)| *name == food && *tag == source)
+                .map(|(_, _, row)| *row)
+                .expect("every food has a row for its chosen source");
+            (food, row)
         })
         .collect()
 });
@@ -239,11 +268,9 @@ pub static FOODS: LazyLock<HashMap<&'static str, Food>> = LazyLock::new(|| {
 ///
 /// Accepts case-insensitive names, spaces or hyphens instead of
 /// underscores, and a leading `Food.` qualifier.
-pub fn parse_food(name: &str) -> Option<&'static str> {
+pub fn parse_food(name: &str) -> Option<FoodName> {
     let trimmed = name.trim();
     let key = trimmed.rsplit('.').next().unwrap_or(trimmed);
     let normalized = key.trim().to_ascii_uppercase().replace([' ', '-'], "_");
-    FOODS
-        .get_key_value(normalized.as_str())
-        .map(|(name, _)| *name)
+    ALL.iter().copied().find(|food| food.name() == normalized)
 }

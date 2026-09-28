@@ -12,7 +12,8 @@
 #[allow(dead_code)] // the binary uses the network entry points; tests do not.
 mod fetch;
 
-use fetch::{to_cache_json, CacheFile, FoodSource, Row};
+use fetch::{to_cache_json, CacheFile, Row};
+use food_core::FoodSource;
 
 /// Compare the parsed row against a sorted `(key, value)` expectation.
 fn assert_row(row: &Row, name: &str, expected: &[(&str, f64)]) {
@@ -292,12 +293,14 @@ fn curated_tables_only_name_catalog_foods() {
     }
     for (name, source) in food_core::foods::CHOOSE {
         assert!(
-            fetch::CATALOG.iter().any(|e| e.name == *name),
-            "{name} has a choose entry but is not in the catalog"
+            fetch::CATALOG.iter().any(|e| e.name == name.name()),
+            "{} has a choose entry but is not in the catalog",
+            name.name()
         );
         assert!(
-            FoodSource::parse(source).is_some(),
-            "{name} chooses unknown source {source}"
+            FoodSource::ALL.contains(source),
+            "{} chooses an unknown source",
+            name.name()
         );
     }
 }
@@ -306,10 +309,10 @@ fn curated_tables_only_name_catalog_foods() {
 fn file_names_round_trip_through_the_source_tag() {
     // `{FOOD}_{Source}.json` is the on-disk contract build.rs re-parses.
     for (name, source) in food_core::foods::CHOOSE {
-        let file = format!("{name}_{}.json", source);
+        let file = format!("{}_{}.json", name.name(), source.name());
         let stem = file.trim_end_matches(".json");
         let (food, tag) = stem.rsplit_once('_').expect("file has a source suffix");
-        assert_eq!(food, *name);
-        assert_eq!(FoodSource::parse(tag), FoodSource::parse(source));
+        assert_eq!(food, name.name());
+        assert_eq!(FoodSource::parse(tag), Some(*source));
     }
 }

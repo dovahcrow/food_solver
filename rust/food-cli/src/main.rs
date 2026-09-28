@@ -18,7 +18,7 @@ use anyhow::{anyhow, Context, Error};
 use clap::{ArgAction, Parser, Subcommand};
 use culpa::{throw, throws};
 use food_core::{
-    parse_food, plan, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus,
+    parse_food, plan, FoodName, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus,
 };
 
 /// ANSI colours, matching the Python frontend so output stays comparable.
@@ -144,7 +144,10 @@ impl CmdFetch {
                 } else {
                     format!(" + {}", extras.join(" + "))
                 };
-                let chosen = food_core::chosen_source(entry.name).unwrap_or("?");
+                let chosen = food_core::parse_food(entry.name)
+                    .map(food_core::chosen_source)
+                    .map(|source| source.name())
+                    .unwrap_or("?");
                 println!("{} {source}{suffix} -> choose {chosen}", entry.name);
             }
             return;
@@ -319,7 +322,7 @@ impl CmdSolve {
 /// already understood rather than raw strings.
 #[derive(Debug, Clone, Copy)]
 struct IngredientInput {
-    food: &'static str,
+    food: FoodName,
     grams: f64,
     kind: IngredientKind,
 }
@@ -417,7 +420,8 @@ fn format_nutrient(report: &NutrientReport, detail: bool) -> String {
     let coverage = if report.missing.is_empty() {
         String::new()
     } else {
-        format!("; incomplete data: {}", report.missing.join(", "))
+        let names: Vec<&str> = report.missing.iter().map(|food| food.name()).collect();
+        format!("; incomplete data: {}", names.join(", "))
     };
     let upper_source = match (report.implicit_upper, report.implicit_multiplier) {
         (true, Some(multiplier)) => format!("; implicit soft upper {multiplier}x"),

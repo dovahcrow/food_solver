@@ -24,7 +24,7 @@ use clarabel::solver::{DefaultSettings, DefaultSolver, IPSolver, NonnegativeCone
 use anyhow::{anyhow, Error};
 use culpa::{throw, throws};
 
-use crate::foods::Food;
+use crate::foods::{Food, FoodName};
 use crate::nutrient::{nutrient_value, Nutrient};
 use crate::units::{G, MCG, MG};
 
@@ -54,7 +54,7 @@ pub struct Requirement {
 /// One ingredient of the batch and its per-gram composition.
 #[derive(Debug, Clone)]
 pub struct FoodRow {
-    pub name: &'static str,
+    pub name: FoodName,
     pub values: Food,
     /// Use exactly `lower` grams when `lower == upper`, otherwise any amount
     /// in `[lower, upper]`.
@@ -327,7 +327,7 @@ pub fn solve(problem: &Problem) -> Solution {
             || food.lower < 0.0
             || food.upper < food.lower
         {
-            throw!(anyhow!("Invalid food bounds for {}", food.name));
+            throw!(anyhow!("Invalid food bounds for {}", food.name.name()));
         }
     }
 
@@ -518,7 +518,7 @@ pub fn solve(problem: &Problem) -> Solution {
 /// One food's contribution to a nutrient, in display units.
 #[derive(Debug, Clone)]
 pub struct Component {
-    pub food: &'static str,
+    pub food: FoodName,
     pub amount: f64,
 }
 
@@ -541,7 +541,7 @@ pub struct NutrientReport {
     pub maximum: Option<f64>,
     pub implicit_upper: bool,
     pub implicit_multiplier: Option<f64>,
-    pub missing: Vec<&'static str>,
+    pub missing: Vec<FoodName>,
     pub components: Vec<Component>,
 }
 

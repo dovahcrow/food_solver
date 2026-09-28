@@ -23,6 +23,7 @@ use std::sync::LazyLock;
 
 use anyhow::{anyhow, Context, Error};
 use culpa::{throw, throws};
+use food_core::FoodSource;
 use regex::Regex;
 
 pub use catalog::{Entry, Source, CATALOG};
@@ -33,52 +34,6 @@ pub use catalog::{Entry, Source, CATALOG};
 /// footnote or a dash is skipped rather than misread.
 pub static AMOUNT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^((\d*\.)?\d+)(g|mg|μg|kJ)$").expect("amount regex"));
-
-/// The source tag used in cache file names (`BAICAI_Chinanutri.json`) and in
-/// the `choose` property.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FoodSource {
-    /// USDA FoodData Central portal view.
-    Usda,
-    /// China Food Composition Tables.
-    Chinanutri,
-    /// USDA SR Legacy.
-    SrLegacy,
-    /// Japan MEXT food composition tables.
-    Mext,
-    /// Defined inline in the source; nothing to fetch.
-    Inline,
-}
-
-impl FoodSource {
-    /// The spelling used in file names and in the `choose` property.
-    pub fn name(self) -> &'static str {
-        match self {
-            FoodSource::Usda => "Usda",
-            FoodSource::Chinanutri => "Chinanutri",
-            FoodSource::SrLegacy => "SrLegacy",
-            FoodSource::Mext => "Mext",
-            FoodSource::Inline => "Inline",
-        }
-    }
-
-    /// Parse the spelling used in `choose`.
-    ///
-    /// Used by the tests and by future readers of the cache layout; `build.rs`
-    /// has its own copy because it cannot depend on this crate.
-    #[allow(dead_code)]
-    pub fn parse(name: &str) -> Option<Self> {
-        [
-            FoodSource::Usda,
-            FoodSource::Chinanutri,
-            FoodSource::SrLegacy,
-            FoodSource::Mext,
-            FoodSource::Inline,
-        ]
-        .into_iter()
-        .find(|source| source.name().eq_ignore_ascii_case(name))
-    }
-}
 
 /// One food's display name and its nutrient row.
 ///

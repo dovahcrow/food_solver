@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Error};
 use culpa::{throw, throws};
 
-use crate::foods::{parse_food, FOODS};
+use crate::foods::{parse_food, FoodName, FOODS};
 use crate::needs::{scale, Profile};
 use crate::nutrient::Nutrient;
 use crate::recipe::{
@@ -15,7 +15,7 @@ use crate::{CA_P_RATIO_MAX, CA_P_RATIO_MIN, MAX_DAYS};
 /// mandatory weight, `[0, upper]` lets the solver choose freely.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct IngredientSpec {
-    pub food: &'static str,
+    pub food: FoodName,
     pub lower: f64,
     pub upper: f64,
     pub minimize_usage: bool,
@@ -23,7 +23,7 @@ pub struct IngredientSpec {
 
 impl IngredientSpec {
     /// A free ingredient the solver may use up to `grams`.
-    pub fn optional_upto(food: &'static str, grams: f64) -> Self {
+    pub fn optional_upto(food: FoodName, grams: f64) -> Self {
         Self {
             food,
             lower: 0.0,
@@ -33,7 +33,7 @@ impl IngredientSpec {
     }
 
     /// A pinned ingredient that must be used in exactly `grams`.
-    pub fn fixed(food: &'static str, grams: f64) -> Self {
+    pub fn fixed(food: FoodName, grams: f64) -> Self {
         Self {
             food,
             lower: grams,
@@ -43,7 +43,7 @@ impl IngredientSpec {
     }
 
     /// A free ingredient that should be used minimally when possible.
-    pub fn minimize(food: &'static str, grams: f64) -> Self {
+    pub fn minimize(food: FoodName, grams: f64) -> Self {
         Self {
             food,
             lower: 0.0,
@@ -91,7 +91,7 @@ impl Default for PlanRequest {
 /// Solved grams of one ingredient.
 #[derive(Debug, Clone)]
 pub struct RecipeLine {
-    pub food: &'static str,
+    pub food: FoodName,
     pub grams: f64,
     pub grams_per_day: f64,
     pub optional: bool,
@@ -114,7 +114,7 @@ pub struct PlanResult {
 
 impl PlanResult {
     /// Batch grams of one food; only valid for an optimal solve.
-    pub fn amount(&self, food: &str) -> Option<f64> {
+    pub fn amount(&self, food: FoodName) -> Option<f64> {
         self.recipe
             .iter()
             .find(|line| line.food == food)
@@ -141,29 +141,29 @@ impl PlanResult {
 #[throws(Error)]
 fn food_rows(ingredients: &[IngredientSpec]) -> Vec<FoodRow> {
     let mut rows = Vec::new();
-    let mut seen: Vec<&str> = Vec::new();
+    let mut seen: Vec<FoodName> = Vec::new();
     for spec in ingredients {
         if seen.contains(&spec.food) {
             throw!(anyhow!(
                 "{} was listed more than once; merge its weights",
-                spec.food
+                spec.food.name()
             ));
         }
         seen.push(spec.food);
         if !spec.lower.is_finite() || !spec.upper.is_finite() {
-            throw!(anyhow!("Bounds for {} must be finite", spec.food));
+            throw!(anyhow!("Bounds for {} must be finite", spec.food.name()));
         }
         if spec.lower < 0.0 || spec.upper < spec.lower {
             throw!(anyhow!(
                 "Invalid bounds for {}: {} to {}",
-                spec.food,
+                spec.food.name(),
                 spec.lower,
                 spec.upper
             ));
         }
         let values = *FOODS
-            .get(spec.food)
-            .ok_or_else(|| anyhow!("Unknown food {}", spec.food))?;
+            .get(&spec.food)
+            .ok_or_else(|| anyhow!("Unknown food {}", spec.food.name()))?;
         rows.push(FoodRow {
             name: spec.food,
             values,
@@ -243,7 +243,7 @@ pub fn plan(request: &PlanRequest) -> PlanResult {
 
 /// Resolve a user-supplied food name to its canonical name.
 #[throws(Error)]
-pub fn resolve_food(name: &str) -> &'static str {
+pub fn resolve_food(name: &str) -> FoodName {
     parse_food(name)
         .ok_or_else(|| anyhow!("Unknown food {name:?}; call list_foods for valid names"))?
 }

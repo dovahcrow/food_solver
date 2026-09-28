@@ -6,19 +6,19 @@
 //! Legacy rows, so the optima shift. The expectations below are the solver's
 //! current output for this batch; re-record them when a `choose` entry changes.
 
-use food_core::{plan, IngredientSpec, Nutrient, PlanRequest, Profile};
+use food_core::{plan, FoodName, IngredientSpec, Nutrient, PlanRequest, Profile};
 
 fn reference_request(days: u32) -> PlanRequest {
     PlanRequest {
         ingredients: vec![
-            IngredientSpec::fixed("CELERY", 245.0),
-            IngredientSpec::fixed("JIANGDOU", 411.0),
-            IngredientSpec::fixed("PORK", 500.0),
-            IngredientSpec::minimize("RICE", 1000.0 * f64::from(days)),
-            IngredientSpec::minimize("CANOLA_OIL", 5.0 * f64::from(days)),
-            IngredientSpec::minimize("SALT", 2.0 * f64::from(days)),
-            IngredientSpec::minimize("EGG_SHELL_POWDER", 5.0 * f64::from(days)),
-            IngredientSpec::minimize("EGG", 100.0 * f64::from(days)),
+            IngredientSpec::fixed(FoodName::CELERY, 245.0),
+            IngredientSpec::fixed(FoodName::JIANGDOU, 411.0),
+            IngredientSpec::fixed(FoodName::PORK, 500.0),
+            IngredientSpec::minimize(FoodName::RICE, 1000.0 * f64::from(days)),
+            IngredientSpec::minimize(FoodName::CANOLA_OIL, 5.0 * f64::from(days)),
+            IngredientSpec::minimize(FoodName::SALT, 2.0 * f64::from(days)),
+            IngredientSpec::minimize(FoodName::EGG_SHELL_POWDER, 5.0 * f64::from(days)),
+            IngredientSpec::minimize(FoodName::EGG, 100.0 * f64::from(days)),
         ],
         days,
         profile: Profile {
@@ -49,17 +49,20 @@ fn reference_batch_solves_to_a_known_optimum() {
     // ingredients the solver picked: RICE, CANOLA_OIL, SALT,
     // EGG_SHELL_POWDER and EGG.
     let expected = [
-        ("CELERY", 245.0),
-        ("JIANGDOU", 411.0),
-        ("PORK", 500.0),
-        ("RICE", 602.3798972429496),
-        ("CANOLA_OIL", 0.0),
-        ("SALT", 0.11534128484496192),
-        ("EGG_SHELL_POWDER", 15.83709288043366),
-        ("EGG", 846.2116410669382),
+        (FoodName::CELERY, 245.0),
+        (FoodName::JIANGDOU, 411.0),
+        (FoodName::PORK, 500.0),
+        (FoodName::RICE, 602.3798972429496),
+        (FoodName::CANOLA_OIL, 0.0),
+        (FoodName::SALT, 0.11534128484496192),
+        (FoodName::EGG_SHELL_POWDER, 15.83709288043366),
+        (FoodName::EGG, 846.2116410669382),
     ];
     for (food, grams) in expected {
-        assert_close(result.amount(food).expect(food), grams, 0.5, food);
+        let actual = result
+            .amount(food)
+            .unwrap_or_else(|| panic!("{}", food.name()));
+        assert_close(actual, grams, 0.5, food.name());
     }
 
     assert_close(
@@ -89,7 +92,7 @@ fn days_scale_requirements_but_not_fixed_weights() {
     let result = plan(&reference_request(20)).expect("solve");
     assert!(result.optimal, "status: {}", result.status);
     assert_close(
-        result.amount("CELERY").expect("CELERY"),
+        result.amount(FoodName::CELERY).expect("CELERY"),
         245.0,
         1e-6,
         "fixed weight",
@@ -97,7 +100,7 @@ fn days_scale_requirements_but_not_fixed_weights() {
     let celery = result
         .recipe
         .iter()
-        .find(|line| line.food == "CELERY")
+        .find(|line| line.food == FoodName::CELERY)
         .unwrap();
     assert_close(celery.grams_per_day, 245.0 / 20.0, 1e-9, "per-day weight");
 }
