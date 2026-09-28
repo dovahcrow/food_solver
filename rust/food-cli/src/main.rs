@@ -27,9 +27,13 @@ mod color {
     pub const RESET: &str = "\x1b[0m";
     pub const RED: &str = "\x1b[31m";
     pub const YELLOW: &str = "\x1b[33m";
-    pub const GRAY: &str = "\x1b[37m";
     pub const LIGHT_GREEN: &str = "\x1b[92m";
-    pub const LIGHT_YELLOW: &str = "\x1b[93m";
+    /// Strikethrough, used for nutrients that are only reported.
+    pub const STRIKE: &str = "\x1b[9m";
+    /// Underline, used for an implicit soft upper bound value.
+    pub const UNDERLINE: &str = "\x1b[4m";
+    /// Turn underline off without resetting the current colour.
+    pub const UNDERLINE_OFF: &str = "\x1b[24m";
 }
 
 #[derive(Parser)]
@@ -460,15 +464,22 @@ impl FromStr for IngredientInput {
     }
 }
 
+/// Colour by status alone; whether a nutrient is required shows up as
+/// strikethrough instead of a different palette.
 fn color_for(report: &NutrientReport) -> &'static str {
-    let required = report.required == food_core::NeedRequired::Required;
-    match (required, report.status) {
-        (false, ReportStatus::BelowMinimum) => color::LIGHT_YELLOW,
-        (false, ReportStatus::AboveMaximum) => color::YELLOW,
-        (false, ReportStatus::WithinRange) => color::GRAY,
-        (true, ReportStatus::BelowMinimum) => color::RED,
-        (true, ReportStatus::AboveMaximum) => color::YELLOW,
-        (true, ReportStatus::WithinRange) => color::LIGHT_GREEN,
+    match display_status(report) {
+        ReportStatus::BelowMinimum => color::RED,
+        ReportStatus::AboveMaximum => color::YELLOW,
+        ReportStatus::WithinRange => color::LIGHT_GREEN,
+    }
+}
+
+/// The status to print. An implicit soft upper bound is only a preference, so
+/// exceeding it is not reported as "above maximum".
+fn display_status(report: &NutrientReport) -> ReportStatus {
+    match report.status {
+        ReportStatus::AboveMaximum if report.implicit_upper => ReportStatus::WithinRange,
+        status => status,
     }
 }
 
@@ -501,24 +512,32 @@ fn format_nutrient(report: &NutrientReport, detail: bool) -> String {
         let names: Vec<&str> = report.missing.iter().map(|food| food.name()).collect();
         format!("; incomplete data: {}", names.join(", "))
     };
-    let upper_source = match (report.implicit_upper, report.implicit_multiplier) {
-        (true, Some(multiplier)) => format!("; implicit soft upper {multiplier}x"),
-        _ => String::new(),
-    };
     let maximum = match report.maximum {
+        // An implicit soft upper is a preference, not a limit, so it is
+        // underlined rather than labelled.
+        Some(value) if report.implicit_upper => format!(
+            "{}{}{}",
+            color::UNDERLINE,
+            format::fixed2(value),
+            color::UNDERLINE_OFF
+        ),
         Some(value) => format::fixed2(value),
         None => "inf".to_string(),
     };
 
     format!(
-        "{color}  {nutrient}{text}, {status}: {minimum} ~ {maximum} {unit}{upper_source}{coverage}{reset}",
+        "{color}{strike}  {nutrient}: {status} {minimum} ~ {maximum} {unit}{text}{coverage}{reset}",
         color = color_for(report),
+        strike = if report.required == food_core::NeedRequired::Required {
+            ""
+        } else {
+            color::STRIKE
+        },
         nutrient = report.nutrient.name(),
-        status = report.status.as_str(),
+        status = display_status(report).as_str(),
         minimum = format::fixed2(report.minimum),
         maximum = maximum,
         unit = report.unit,
-        upper_source = upper_source,
         coverage = coverage,
         reset = color::RESET,
     )
