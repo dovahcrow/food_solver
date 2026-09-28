@@ -105,7 +105,7 @@ fn days_scale_requirements_but_not_fixed_weights() {
 #[test]
 fn nutrition_report_covers_every_requirement() {
     let result = plan(&reference_request(10)).expect("solve");
-    let requirements = food_core::needs::dog_needs(food_core::Profile::default()).unwrap();
+    let requirements = food_core::Profile::default().nutrient_needs().unwrap();
     // The report has one line per requirement, in the nutrient enum's order.
     assert_eq!(result.nutrition.len(), requirements.len());
     let names: Vec<&str> = result.nutrition.iter().map(|r| r.nutrient.name()).collect();

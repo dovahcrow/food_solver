@@ -4,7 +4,7 @@ use anyhow::{anyhow, Error};
 use culpa::{throw, throws};
 
 use crate::foods::{parse_food, FOODS};
-use crate::needs::{dog_needs, scale, Profile};
+use crate::needs::{scale, Profile};
 use crate::nutrient::Nutrient;
 use crate::recipe::{
     nutrition_report, solve, FoodRow, NutrientReport, Problem, RatioConstraint, Requirement,
@@ -65,6 +65,15 @@ pub struct PlanRequest {
     pub profile: Profile,
     pub implicit_soft_upper_multiplier: Option<f64>,
     pub detail: bool,
+}
+
+impl PlanRequest {
+    /// Scaled FEDIAF requirements for this request's profile and day count.
+    #[throws(Error)]
+    pub fn requirements(&self) -> Vec<(Nutrient, Requirement)> {
+        let base = self.profile.nutrient_needs()?;
+        scale(&base, self.days)?.into_iter().collect()
+    }
 }
 
 impl Default for PlanRequest {
@@ -169,13 +178,6 @@ fn food_rows(ingredients: &[IngredientSpec]) -> Vec<FoodRow> {
     rows
 }
 
-/// Scaled FEDIAF requirements for the request's profile and day count.
-#[throws(Error)]
-pub fn requirements(request: &PlanRequest) -> Vec<(Nutrient, Requirement)> {
-    let base = dog_needs(request.profile)?;
-    scale(&base, request.days)?.into_iter().collect()
-}
-
 /// Solve a batch and collect its recipe and per-day nutrient report.
 #[throws(Error)]
 pub fn plan(request: &PlanRequest) -> PlanResult {
@@ -184,7 +186,7 @@ pub fn plan(request: &PlanRequest) -> PlanResult {
     }
 
     let foods = food_rows(&request.ingredients)?;
-    let needs = requirements(request)?;
+    let needs = request.requirements()?;
     let problem = Problem {
         foods,
         needs: needs.clone(),

@@ -10,8 +10,8 @@ use rmcp::{
 use serde::{Deserialize, Serialize};
 
 use food_core::{
-    dog_needs, parse_food, plan, scale, IngredientSpec, NeedRequired, NeedSoftness, PlanRequest,
-    PlanResult, Profile, FOOD_NAMES, MAX_DAYS,
+    parse_food, plan, scale, IngredientSpec, NeedRequired, NeedSoftness, PlanRequest, PlanResult,
+    Profile, FOOD_NAMES, MAX_DAYS,
 };
 use serde_json::{to_string_pretty, Value};
 
@@ -165,7 +165,7 @@ fn get_needs_payload(request: &NeedsRequest) -> String {
         active: request.active,
         daily_kcal: request.daily_kcal,
     };
-    let base = dog_needs(profile)?;
+    let base = profile.nutrient_needs()?;
     let scaled = scale(&base, request.days)?;
     let days = f64::from(request.days);
     let rows: Vec<serde_json::Value> = scaled
