@@ -1,6 +1,7 @@
 //! The embedded food table must stay complete and self-consistent.
 
-use food_core::{parse_food, Food, Nutrient, FOODS, FOOD_NAMES};
+use food_core::foods;
+use food_core::{chosen_source, food_rows, parse_food, Food, Nutrient, FOODS, FOOD_NAMES};
 
 #[test]
 fn every_named_food_is_in_the_map() {
@@ -40,4 +41,32 @@ fn accessor_reads_the_named_fields() {
     assert_eq!(pork.nutrient(Nutrient::VitaminB1), Some(5.4e-06));
     assert_eq!(pork.nutrient(Nutrient::VitaminB2), Some(1e-06));
     assert_eq!(pork.nutrient(Nutrient::Fiber), None);
+}
+
+#[test]
+fn every_food_resolves_to_its_chosen_row() {
+    // `FOODS` holds one row per food, taken from the source `CHOOSE` names (or
+    // the primary source when there is no entry), and every name must resolve.
+    for name in FOOD_NAMES {
+        assert!(FOODS.contains_key(name), "{name} has no chosen row");
+        let source = chosen_source(name).unwrap_or_else(|| panic!("{name} has no source"));
+        assert!(
+            food_rows(name).iter().any(|(tag, _)| *tag == source),
+            "{name} chose {source} but has no such row"
+        );
+    }
+}
+
+#[test]
+fn choose_only_names_known_foods() {
+    for (name, source) in foods::CHOOSE {
+        assert!(
+            FOOD_NAMES.contains(name),
+            "CHOOSE names unknown food {name}"
+        );
+        assert!(
+            food_rows(name).iter().any(|(tag, _)| tag == source),
+            "CHOOSE sends {name} to {source}, which has no cached row"
+        );
+    }
 }

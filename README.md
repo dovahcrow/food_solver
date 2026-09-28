@@ -123,7 +123,7 @@ uv sync
 ```sh
 just refresh-foods RICE EGG CHICKEN_BREAST   # Rust 抓取器（food fetch）
 just refresh-foods                           # 全部可抓取食材
-just refresh-foods --list                    # 列出食材及其来源
+just refresh-foods --list                    # 列出食材、可用来源与当前选择
 just refresh-foods-py RICE EGG               # Python 参考实现
 ```
 
@@ -142,20 +142,28 @@ just refresh-foods-py RICE EGG               # Python 参考实现
   用量，`0 ~ 上限` 表示可选。数量都是**整批克数**，`days` 只缩放需求。
 - `rust/food-cli/`：`food` 命令。
 - `rust/food-mcp/`：`food-mcp`，把同一流程暴露成 `list_foods`、`get_needs`、
-  `solve_recipe` 三个 MCP 工具。
-- `rust/food-cli/` 的 `fetch` 子命令（`food fetch`）：直接抓取 USDA 与
-  《中国食物成分表》并把结果写进 `foods/*.json`，是把 Python 的
-  `food_getters/{usda,chinanutri}.py` 原样移植过来的版本；它写出的文件与
-  Python 版逐字节相同，不再需要 Python 来更新数据。
-- `rust/food-core/build.rs`：构建时读取 `foods/*.json`（外加 Python 源码里
+  `solve_recipe` 三个 MCP 工具。`solve_recipe` 与 `get_needs` 的 `weight`、
+  `days`、`age` 是必填项（没有默认值），犬只档案未知时应先询问用户。
+- `rust/food-cli/` 的 `fetch` 子命令（`food fetch`）：抓取 USDA portal、
+  《中国食物成分表》、USDA SR Legacy 与日本 MEXT 四种来源，各自写进
+  `foods/{FOOD}_{Source}.json`；`expand-sr-legacy` 子命令把 SR Legacy 的
+  全量 JSON 展开成同样的逐食材文件。USDA/中国两条路径移植自 Python 的
+  `food_getters/{usda,chinanutri}.py`，产出与 Python 逐字节相同。
+- 缓存布局：同一种食材每个来源一个文件（如 `BAICAI_Chinanutri.json`、
+  `BEEF_SrLegacy.json`），文件体只存营养素，来源由文件名承载。`build.rs`
+  把**全部**来源都编进二进制，运行期由 `src/foods.rs` 的 `CHOOSE` 表决定用
+  哪一份——CLI 和 MCP 传入的始终只是食材名，名字 + 来源在内部合成后再查表。
+  换来源只改 `CHOOSE` 一行并重建，不必重新抓取。
+- `rust/food-core/build.rs`：构建时读取 `foods/{FOOD}_{Source}.json`（外加 Python 源码里
   三条内联配方）生成内嵌食材营养表，`src/foods.rs` 再用 `include!` 引进来。
 
 求解器用 [Clarabel](https://github.com/oxfordcontrol/Clarabel.rs)（牛津大学，
 CVXPY 的默认求解器），不是 `cvxrust`（只有 0.1.0，不成熟）。目标函数与
 Python 版完全一致：只有下限的软需求用 `max(0, (L - y) / L)^2`，有上下限的
 用两侧相对平方损失，另加 `U = 1.5L` 的隐式软上限；硬约束与钙磷比不变。
-Rust 版在原 10 天参考配方上与 Python 输出**数值一致**（见
-`rust/food-core/tests/reference.rs`）。
+Rust 版原本与 Python 输出数值一致；缓存改为按来源取行后，被 `CHOOSE`
+切到 SR Legacy 的 18 个食材数值已变化，参考测试因此记录的是当前基线
+（见 `rust/food-core/tests/reference.rs`）。
 
 ```sh
 just build          # cargo build --release
@@ -172,10 +180,14 @@ CLI 支持 `-d/--day`、`--detail`、`--daily-kcal`、`--weight`、`--age`、
 ## Python 参考实现
 
 `src/` 仍保留为 Python 参考实现，主要用来和 Rust 结果对照：`just opt -d 10`
-运行它，`just refresh-foods-py` 走它的食材抓取。数据抓取已由 Rust 的
-`food fetch` 覆盖（`just refresh-foods`），两个前端产出的缓存逐字节一致，
-因此更新食材数据不再依赖 Python。MCP 支持只保留在 Rust 的 `food-mcp`。
+运行它，`just refresh-foods-py` 走它的食材抓取（仅 USDA/中国两条来源）。
+数据抓取已由 Rust 的 `food fetch` 覆盖（`just refresh-foods`），因此更新
+食材数据不再依赖 Python。MCP 支持只保留在 Rust 的 `food-mcp`，Python 侧的
+`mcp_server` 已不存在，对应的 Python 测试也已移除。
 食材 JSON 更新后重新构建即可（`build.rs` 会自动重新生成内嵌表）。
+SR Legacy 的氨基酸/脂肪酸面板比 portal 视图全，`CHOOSE` 里已把 18 个食材
+切到 `SrLegacy`（因此这些食材的求解数值与旧 Python 结果不再一致）；MEXT
+是唯一提供碘、生物素、泛酸的来源，抓取脚本已接好，`MEXT` 表填好编号即可用。
 
 ## 作为 Codex 插件使用
 

@@ -164,3 +164,52 @@ pub const CHINA_IGNORED: &[&str] = &[
     "α-TE",
     "食部(Edible)",
 ];
+
+/// Names that only appear in the SR Legacy dataset.
+///
+/// SR Legacy keeps the same vocabulary as the portal view for everything the
+/// portal already carried, so `USDA_NAMES` still applies; these are the extra
+/// rows it adds (the vitamin K forms and the alpha/beta carotene split). Rows
+/// that the portal expressed under a different label but SR Legacy reports
+/// individually — `Carotene, beta` covers `cis-`/`trans-beta-Carotene`,
+/// `Vitamin D (D2 + D3)` covers the D2/D3 forms — are listed as `None` so the
+/// ambiguity stays visible instead of being double counted.
+pub const SR_LEGACY_EXTRA: &[(&str, Option<&str>)] = &[
+    ("Vitamin K (phylloquinone)", Some("VITAMIN_K")),
+    ("Vitamin K (Dihydrophylloquinone)", None),
+    ("Vitamin K (Menaquinone-4)", None),
+    ("Carotene, alpha", None),
+    ("cis-beta-Carotene", None),
+    ("trans-beta-Carotene", None),
+    ("Retinol", None),
+    ("Folic acid", None),
+    ("Folate, DFE", None),
+    ("Folate, food", None),
+    ("Vitamin E, added", None),
+    ("Vitamin B-12, added", None),
+    ("Vitamin A, IU", None),
+    ("Vitamin D2 (ergocalciferol)", None),
+    ("Vitamin D3 (cholecalciferol)", None),
+    ("PUFA 18:2 n-6 c,c", Some("LINOLEIC_ACID")),
+    ("PUFA 18:3 n-3 c,c,c (ALA)", Some("ALPHA_LINOLENIC_ACID")),
+    ("PUFA 20:4 n-6", Some("ARACHIDONIC_ACID")),
+    ("PUFA 20:5 n-3 (EPA)", Some("EPA")),
+    ("PUFA 22:6 n-3 (DHA)", Some("DHA")),
+];
+
+/// Map an SR Legacy nutrient name onto a solver key.
+///
+/// Returns `Some(None)` for a deliberately dropped row, `None` for a name the
+/// tables do not list (the caller records and skips it, as the portal path
+/// does). SR Legacy's fatty-acid total rows (`PUFA 18:2`, `SFA 16:0`, …) are
+/// dropped for the same reason as the portal's: an unspecified chain is not
+/// safely one named acid.
+pub fn map_sr_legacy_name(name: &str) -> Option<Option<&'static str>> {
+    if let Some((_, value)) = SR_LEGACY_EXTRA.iter().find(|(key, _)| *key == name) {
+        return Some(*value);
+    }
+    if let Some((_, value)) = USDA_NAMES.iter().find(|(key, _)| *key == name) {
+        return Some(*value);
+    }
+    Some(None)
+}

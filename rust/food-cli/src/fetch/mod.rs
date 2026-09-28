@@ -2,8 +2,9 @@
 //!
 //! `build.rs` in `food-core` turns `foods/*.json` into the embedded table, but
 //! those files were only ever produced by the Python frontends. This module
-//! ports both getters — USDA FoodData Central and the China Food Composition
-//! Tables — so the `food fetch` command can refresh the cache without Python.
+//! ports all three getters — USDA FoodData Central, the China Food Composition
+//! Tables, and USDA SR Legacy — so the `food fetch` command can refresh the
+//! cache without Python.
 //!
 //! The files it writes are byte-for-byte compatible with the Python ones:
 //! sorted keys, four-space indent, an `__name__` display name, and values in
@@ -11,7 +12,9 @@
 
 pub mod catalog;
 pub mod chinanutri;
+pub mod mext;
 pub mod nutrients;
+pub mod sr_legacy;
 pub mod units;
 pub mod usda;
 
@@ -31,6 +34,52 @@ pub use catalog::{Entry, Source, CATALOG};
 pub static AMOUNT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^((\d*\.)?\d+)(g|mg|μg|kJ)$").expect("amount regex"));
 
+/// The source tag used in cache file names (`BAICAI_Chinanutri.json`) and in
+/// the `choose` property.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoodSource {
+    /// USDA FoodData Central portal view.
+    Usda,
+    /// China Food Composition Tables.
+    Chinanutri,
+    /// USDA SR Legacy.
+    SrLegacy,
+    /// Japan MEXT food composition tables.
+    Mext,
+    /// Defined inline in the source; nothing to fetch.
+    Inline,
+}
+
+impl FoodSource {
+    /// The spelling used in file names and in the `choose` property.
+    pub fn name(self) -> &'static str {
+        match self {
+            FoodSource::Usda => "Usda",
+            FoodSource::Chinanutri => "Chinanutri",
+            FoodSource::SrLegacy => "SrLegacy",
+            FoodSource::Mext => "Mext",
+            FoodSource::Inline => "Inline",
+        }
+    }
+
+    /// Parse the spelling used in `choose`.
+    ///
+    /// Used by the tests and by future readers of the cache layout; `build.rs`
+    /// has its own copy because it cannot depend on this crate.
+    #[allow(dead_code)]
+    pub fn parse(name: &str) -> Option<Self> {
+        [
+            FoodSource::Usda,
+            FoodSource::Chinanutri,
+            FoodSource::SrLegacy,
+            FoodSource::Mext,
+            FoodSource::Inline,
+        ]
+        .into_iter()
+        .find(|source| source.name().eq_ignore_ascii_case(name))
+    }
+}
+
 /// One food's display name and its nutrient row.
 ///
 /// The same shape both getters return, so one cache writer serves them all.
@@ -46,13 +95,23 @@ pub struct Row {
     pub skipped: Vec<String>,
 }
 
-/// Fetch a single catalog entry.
+/// One cache file: a row plus the source tag that names its file.
 ///
-/// Inline foods have no remote source and return an error; the caller filters
-/// them out beforehand.
+/// Which source the solver embeds is decided once, by the `CHOOSE` table in
+/// `catalog.rs`; the JSON body carries no provenance of its own.
+#[derive(Debug, Clone)]
+pub struct CacheFile {
+    pub row: Row,
+    pub source: FoodSource,
+}
+
+/// Fetch one food from its primary source into a cache file.
+///
+/// The row is written as `{FOOD}_{Source}.json` with a `choose` property; this
+/// is the only source a plain `food fetch` writes.
 #[throws(Error)]
-pub fn fetch(entry: &Entry) -> Row {
-    let row = match entry.source {
+pub fn fetch_primary(entry: &Entry, directory: &Path) -> CacheFile {
+    let mut row = match entry.source {
         Source::Usda(id) => usda::get(id)?,
         Source::Chinanutri(id) => chinanutri::get(id)?,
         Source::Inline => throw!(anyhow!(
@@ -61,55 +120,101 @@ pub fn fetch(entry: &Entry) -> Row {
         )),
     };
 
-    let nutrients = if entry.cooked_to_raw {
+    if entry.cooked_to_raw {
         // Same dirty fix as the Python frontend: some nutrients are only
         // published for the cooked food, so divide back towards the raw one.
-        row.nutrients
+        row.nutrients = row
+            .nutrients
             .into_iter()
             .map(|(key, value)| (key, value / 1.49))
-            .collect()
-    } else {
-        row.nutrients
-    };
-
-    Row {
-        name: row.name,
-        nutrients,
-        skipped: row.skipped,
+            .collect();
     }
+
+    let source = match entry.source {
+        Source::Usda(_) => FoodSource::Usda,
+        Source::Chinanutri(_) => FoodSource::Chinanutri,
+        Source::Inline => FoodSource::Inline,
+    };
+    write_cache(directory, entry.name, row, source)?
 }
 
-/// Render a row as the cache JSON the solver reads.
+/// Fetch this food's curated SR Legacy record into its own cache file.
+///
+/// Returns `None` when no SR Legacy record is curated for the food.
+#[throws(Error)]
+pub fn fetch_sr_legacy(entry: &Entry, directory: &Path) -> Option<CacheFile> {
+    let Some(id) = catalog::sr_legacy_id(entry.name) else {
+        return None;
+    };
+    let row = sr_legacy::get(id)?;
+    let file = write_cache(directory, entry.name, row, FoodSource::SrLegacy)?;
+    Some(file)
+}
+
+/// Fetch this food's MEXT record into its own cache file.
+///
+/// MEXT ships as three whole-country workbooks, so `foods` is the already
+/// loaded index from [`load_mext`]; looking the food up there avoids
+/// re-downloading the workbooks per food.
+#[throws(Error)]
+pub fn fetch_mext(
+    entry: &Entry,
+    foods: &std::collections::HashMap<String, mext::MextFood>,
+    directory: &Path,
+) -> Option<CacheFile> {
+    let Some(number) = catalog::mext_number(entry.name) else {
+        return None;
+    };
+    let Some(food) = foods.get(number) else {
+        throw!(anyhow!(
+            "MEXT food {number} for {} is not in the workbooks",
+            entry.name
+        ));
+    };
+    let row = Row {
+        name: format!("{} {}", food.number, food.name),
+        nutrients: food.nutrients.clone(),
+        skipped: Vec::new(),
+    };
+    let file = write_cache(directory, entry.name, row, FoodSource::Mext)?;
+    Some(file)
+}
+
+/// Write one source's row as `{FOOD}_{Source}.json`.
+#[throws(Error)]
+fn write_cache(directory: &Path, food: &str, row: Row, source: FoodSource) -> CacheFile {
+    std::fs::create_dir_all(directory)
+        .with_context(|| format!("create {}", directory.display()))?;
+    let file = CacheFile { row, source };
+    let path = directory.join(format!("{food}_{}.json", source.name()));
+    let text = to_cache_json(&file)?;
+    std::fs::write(&path, text).with_context(|| format!("write {}", path.display()))?;
+    file
+}
+
+/// Render a cache file, including its provenance and `choose` flag.
 ///
 /// The bytes match Python's `json.dump(row, indent=4, sort_keys=True,
 /// ensure_ascii=False)` for the same data: keys sorted, four-space indent,
 /// `__name__` last (its underscore sorts after every uppercase key), raw UTF-8
-/// for non-ASCII names, and the same shortest-round-trip float literals. That
-/// keeps a Rust refresh diffing cleanly against the committed caches.
+/// for non-ASCII names, and the same shortest-round-trip float literals. The
+/// source lives in the file name, not in the body.
 #[throws(Error)]
-pub fn to_cache_json(row: &Row) -> String {
-    let mut entries = row.nutrients.clone();
-    entries.sort_by(|a, b| a.0.cmp(b.0));
+pub fn to_cache_json(file: &CacheFile) -> String {
+    let mut lines: Vec<String> = file
+        .row
+        .nutrients
+        .iter()
+        .map(|(key, value)| format!("    {}: {}", json_string(key), python_float(*value)))
+        .collect();
+    lines.sort();
+    lines.push(format!(
+        "    {}: {}",
+        json_string("__name__"),
+        json_string(&file.row.name)
+    ));
 
-    let mut out = String::from("{\n");
-    for (index, (key, value)) in entries.iter().enumerate() {
-        if index > 0 {
-            out.push_str(",\n");
-        }
-        out.push_str("    ");
-        out.push_str(&json_string(key));
-        out.push_str(": ");
-        out.push_str(&python_float(*value));
-    }
-    if !row.nutrients.is_empty() {
-        out.push_str(",\n");
-    }
-    out.push_str("    ");
-    out.push_str(&json_string("__name__"));
-    out.push_str(": ");
-    out.push_str(&json_string(&row.name));
-    out.push_str("\n}");
-    out
+    format!("{{\n{}\n}}", lines.join(",\n"))
 }
 
 /// Quote a string the way Python's `json.dumps` does with `ensure_ascii=False`.
@@ -149,18 +254,44 @@ fn python_float(value: f64) -> String {
     format!("{mantissa}e{sign}{:02}", exponent.abs())
 }
 
-/// Fetch one food and write its cache file under `directory`.
-///
-/// `directory` is created if needed, matching the Python `get_or_load`.
+/// Download the three MEXT workbooks and index every food by its 食品番号.
 #[throws(Error)]
-pub fn refresh(entry: &Entry, directory: &Path) -> Row {
+pub fn load_mext() -> std::collections::HashMap<String, mext::MextFood> {
+    mext::fetch_all()?
+        .into_iter()
+        .map(|food| (food.number.clone(), food))
+        .collect()
+}
+
+/// Every curated SR Legacy food expanded straight from the bulk dataset.
+///
+/// `owned` pairs each catalog food with its curated SR Legacy fdcId; the
+/// dataset holds thousands of foods but only the owned ids get a file, so the
+/// result stays `{FOOD}_{Source}.json` rather than the USDA description.
+#[throws(Error)]
+pub fn expand_sr_legacy(payload: &str, owned: &[(String, u64)], directory: &Path) -> Vec<String> {
+    let data: serde_json::Value =
+        serde_json::from_str(payload).context("parse SR Legacy dataset")?;
+    let foods = data
+        .get("SRLegacyFoods")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| anyhow!("dataset has no SRLegacyFoods array"))?;
+
     std::fs::create_dir_all(directory)
         .with_context(|| format!("create {}", directory.display()))?;
-    let row = fetch(entry)?;
-    let path = directory.join(format!("{}.json", entry.name));
-    let text = to_cache_json(&row)?;
-    std::fs::write(&path, text).with_context(|| format!("write {}", path.display()))?;
-    row
+    let mut written = Vec::new();
+    for food in foods {
+        let Some(id) = food.get("fdcId").and_then(serde_json::Value::as_u64) else {
+            continue;
+        };
+        let Some((name, _)) = owned.iter().find(|(_, want)| *want == id) else {
+            continue;
+        };
+        let row = sr_legacy::parse(&food.to_string())?;
+        let file = write_cache(directory, name, row, FoodSource::SrLegacy)?;
+        written.push(format!("{name}_{}.json", file.source.name()));
+    }
+    written
 }
 
 /// Where the cache lives: `FOODS_DIR` when set, else `foods` under the CWD.

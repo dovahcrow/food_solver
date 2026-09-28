@@ -13,7 +13,7 @@ mod format;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow, Context, Error};
 use clap::{ArgAction, Parser, Subcommand};
 use culpa::{throw, throws};
 use food_core::{
@@ -55,6 +55,8 @@ enum Command {
     Solve(CmdSolve),
     /// Download food nutrient caches from USDA and the China Food tables.
     Fetch(CmdFetch),
+    /// Expand the bulk SR Legacy JSON into per-food cache files.
+    ExpandSrLegacy(CmdExpandSrLegacy),
 }
 
 /// Solve a batch from ingredient amounts and a day count.
@@ -119,6 +121,7 @@ struct CmdFetch {
 fn main_body(cli: Cli) {
     match cli.cmd {
         Some(Command::Fetch(fetch)) => fetch.run()?,
+        Some(Command::ExpandSrLegacy(expand)) => expand.run()?,
         Some(Command::Solve(solve)) => solve.run()?,
         // No subcommand: the historical bare invocation is a solve.
         None => cli.solve.run()?,
@@ -130,13 +133,26 @@ impl CmdFetch {
     fn run(&self) {
         if self.list {
             for entry in fetch::CATALOG {
-                match entry.source {
-                    fetch::Source::Usda(id) => println!("{} usda {id}", entry.name),
-                    fetch::Source::Chinanutri(id) => {
-                        println!("{} chinanutri {id}", entry.name);
-                    }
-                    fetch::Source::Inline => println!("{} inline", entry.name),
+                let source = match entry.source {
+                    fetch::Source::Usda(id) => format!("usda {id}"),
+                    fetch::Source::Chinanutri(id) => format!("chinanutri {id}"),
+                    fetch::Source::Inline => "inline".to_string(),
+                };
+                // Secondary sources are reported next to the primary one.
+                let mut extras = Vec::new();
+                if let Some(id) = fetch::catalog::sr_legacy_id(entry.name) {
+                    extras.push(format!("sr-legacy {id}"));
                 }
+                if let Some(number) = fetch::catalog::mext_number(entry.name) {
+                    extras.push(format!("mext {number}"));
+                }
+                let suffix = if extras.is_empty() {
+                    String::new()
+                } else {
+                    format!(" + {}", extras.join(" + "))
+                };
+                let chosen = food_core::chosen_source(entry.name).unwrap_or("?");
+                println!("{} {source}{suffix} -> choose {chosen}", entry.name);
             }
             return;
         }
@@ -165,22 +181,101 @@ impl CmdFetch {
                 continue;
             }
             eprintln!("[{}/{}] fetching {}", index + 1, total, entry.name);
-            match fetch::refresh(entry, &directory) {
-                Ok(row) => {
-                    eprintln!(
-                        "    {} -> {} ({} nutrients)",
-                        row.name,
-                        entry.name,
-                        row.nutrients.len()
-                    );
-                    if !row.skipped.is_empty() {
-                        eprintln!("    skipped unmapped rows: {}", row.skipped.join(", "));
-                    }
-                }
-                // One bad page must not sink the whole run: report and continue.
+            // Every source the food has: the primary row, then any curated
+            // SR Legacy and MEXT records. Each lands in its own file.
+            // Each source lands in its own file; a failure on one is
+            // reported and the rest still run.
+            match fetch::fetch_primary(entry, &directory) {
+                Ok(file) => report_file(&file),
                 Err(error) => eprintln!("    error: {error:#}"),
             }
+            match fetch::fetch_sr_legacy(entry, &directory) {
+                Ok(Some(file)) => report_file(&file),
+                Ok(None) => {}
+                Err(error) => eprintln!("    error: {error:#}"),
+            }
+            if fetch::catalog::mext_number(entry.name).is_some() {
+                // MEXT is one bulk download, so a failure there is reported
+                // without stopping the per-food sources.
+                match fetch::load_mext() {
+                    Ok(foods) => match fetch::fetch_mext(entry, &foods, &directory) {
+                        Ok(Some(file)) => report_file(&file),
+                        Ok(None) => {}
+                        Err(error) => eprintln!("    error: {error:#}"),
+                    },
+                    Err(error) => eprintln!("    error: {error:#}"),
+                }
+            }
         }
+    }
+}
+
+/// Report one written cache file on stderr.
+fn report_file(file: &fetch::CacheFile) {
+    eprintln!(
+        "    {}: {} ({} nutrients)",
+        file.source.name(),
+        file.row.name,
+        file.row.nutrients.len()
+    );
+    if !file.row.skipped.is_empty() {
+        eprintln!(
+            "    {}: skipped unmapped rows: {}",
+            file.source.name(),
+            file.row.skipped.join(", ")
+        );
+    }
+}
+
+/// Expand the bulk SR Legacy dataset into per-food cache files.
+#[derive(Parser, Debug)]
+struct CmdExpandSrLegacy {
+    /// The `FoodData_Central_sr_legacy_food_json_*.json` file to expand.
+    #[arg(value_name = "JSON")]
+    json: PathBuf,
+
+    /// Cache directory; overrides FOODS_DIR.
+    #[arg(long, value_name = "DIR")]
+    dir: Option<PathBuf>,
+
+    /// Print what would be written without writing anything.
+    #[arg(long, default_value_t = false)]
+    dry_run: bool,
+}
+
+impl CmdExpandSrLegacy {
+    #[throws(Error)]
+    fn run(&self) {
+        let payload = std::fs::read_to_string(&self.json)
+            .with_context(|| format!("read {}", self.json.display()))?;
+        let directory = self.dir.clone().unwrap_or_else(fetch::foods_dir);
+
+        // The dataset names foods as USDA text, so match each catalog entry to
+        // its curated SR Legacy record by description to recover the `{FOOD}`
+        // part of the file name.
+        let owned: Vec<(String, u64)> = fetch::CATALOG
+            .iter()
+            .filter_map(|entry| {
+                fetch::catalog::sr_legacy_id(entry.name).map(|id| (entry.name.to_string(), id))
+            })
+            .collect();
+
+        if self.dry_run {
+            println!(
+                "would expand {} into {}/",
+                self.json.display(),
+                directory.display()
+            );
+            for (name, _) in &owned {
+                println!("  {name}_SrLegacy.json");
+            }
+            return;
+        }
+        let written = fetch::expand_sr_legacy(&payload, &owned, &directory)?;
+        for file in &written {
+            println!("wrote {}", directory.join(file).display());
+        }
+        println!("{} file(s) written", written.len());
     }
 }
 

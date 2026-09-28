@@ -1,11 +1,13 @@
-"""The shared planner plus the CLI and MCP frontends over it."""
+"""The shared planner plus the Python CLI frontend over it.
 
-import json
+MCP lives only in Rust now (`rust/food-mcp`), so its Python-side payload tests
+were removed with the module they covered.
+"""
+
 import unittest
 
 from src import report
 from src.food import Food
-from src.mcp_server import Ingredient, plan_payload, spec_from_model
 from src.planner import (
     IngredientSpec,
     PlanRequest,
@@ -103,38 +105,6 @@ class CliOutputTests(unittest.TestCase):
 
     def test_infeasible_render_is_the_cli_notice(self):
         self.assertEqual(report.render(plan(reference_request(1))), "Solution not found")
-
-
-class McpPayloadTests(unittest.TestCase):
-    def test_payload_serialises_recipe_and_nutrition(self):
-        payload = plan_payload(reference_request(10))
-        json.dumps(payload)  # must stay JSON-serialisable for the transport
-        self.assertTrue(payload["optimal"])
-        self.assertEqual(len(payload["recipe"]), 8)
-        self.assertTrue(payload["nutrition"])
-        self.assertGreater(payload["energy_per_day_kcal"], 0)
-        self.assertIsInstance(payload["objective"], float)
-        energy = next(n for n in payload["nutrition"] if n["nutrient"] == "ENERGY")
-        self.assertIn("amount_per_day", energy)
-        self.assertIn("status", energy)
-
-    def test_ingredient_model_maps_optional_and_fixed(self):
-        optional = spec_from_model(Ingredient(food="rice", grams=5, optional=True))
-        self.assertEqual((optional.lower, optional.upper), (0.0, 5.0))
-        self.assertTrue(optional.optional)
-
-        fixed = spec_from_model(Ingredient(food="Food.EGG", grams=7))
-        self.assertEqual((fixed.lower, fixed.upper), (7.0, 7.0))
-        self.assertFalse(fixed.optional)
-
-    def test_infeasible_payload_explains_the_attempt(self):
-        payload = plan_payload(reference_request(1))
-        json.dumps(payload)
-        self.assertFalse(payload["optimal"])
-        self.assertEqual(payload["recipe"], [])
-        self.assertEqual(payload["nutrition"], [])
-        self.assertEqual(len(payload["attempted_recipe"]), 8)
-        self.assertIn("infeasible", payload["hint"])
 
 
 if __name__ == "__main__":

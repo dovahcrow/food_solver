@@ -1,7 +1,10 @@
-//! Compare the Rust solver against the Python reference.
+//! End-to-end solver checks on the reference batch.
 //!
-//! The expectations below were produced by running the equivalent solve with
-//! the Python frontends on the same ingredient bounds and requirements.
+//! The numbers used to match the Python frontends exactly. They no longer do:
+//! the cache now picks one source per food (`choose` in the file metadata), and
+//! `CELERY`, `RICE` and `EGG` were deliberately moved onto their richer SR
+//! Legacy rows, so the optima shift. The expectations below are the solver's
+//! current output for this batch; re-record them when a `choose` entry changes.
 
 use food_core::{plan, IngredientSpec, Nutrient, PlanRequest, Profile};
 
@@ -38,38 +41,37 @@ fn assert_close(actual: f64, expected: f64, tolerance: f64, label: &str) {
 }
 
 #[test]
-fn reference_batch_matches_the_python_solver() {
+fn reference_batch_solves_to_a_known_optimum() {
     let result = plan(&reference_request(10)).expect("solve");
     assert!(result.optimal, "status: {}", result.status);
 
-    // Python: CELERY 245.0, JIANGDOU 411.0, PORK 500.00000000000006,
-    // RICE 564.1651680898664, CANOLA_OIL 1.6767e-08, SALT 9.8374e-07,
-    // EGG_SHELL_POWDER 15.386216432485288, EGG 961.6387897502321.
+    // CELERY (fixed), JIANGDOU (fixed), PORK (fixed), then the optional
+    // ingredients the solver picked: RICE, CANOLA_OIL, SALT,
+    // EGG_SHELL_POWDER and EGG.
     let expected = [
         ("CELERY", 245.0),
         ("JIANGDOU", 411.0),
         ("PORK", 500.0),
-        ("RICE", 564.1651680898664),
+        ("RICE", 532.7301983884263),
         ("CANOLA_OIL", 0.0),
         ("SALT", 0.0),
-        ("EGG_SHELL_POWDER", 15.386216432485288),
-        ("EGG", 961.6387897502321),
+        ("EGG_SHELL_POWDER", 16.484520612340926),
+        ("EGG", 910.6478498307451),
     ];
     for (food, grams) in expected {
         assert_close(result.amount(food).expect(food), grams, 0.5, food);
     }
 
-    // Python's objective for this batch.
     assert_close(
         result.objective.expect("objective"),
-        6.292734671354526,
+        4.572885274716589,
         0.05,
         "objective",
     );
 
     let energy = result.nutrient(Nutrient::Energy).expect("energy");
     assert_eq!(energy.unit, "kJ");
-    assert_close(energy.value, 1796.09, 0.05, "energy per day");
+    assert_close(energy.value, 1728.276786416909, 0.05, "energy per day");
     assert_eq!(energy.status.as_str(), "within range");
 }
 

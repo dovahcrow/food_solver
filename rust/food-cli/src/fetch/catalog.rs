@@ -7,7 +7,7 @@
 /// Where a food's nutrient row comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
-    /// USDA FoodData Central, by its portal food id.
+    /// USDA FoodData Central portal view, by its food id.
     Usda(u64),
     /// China Food Composition Tables, by its food id.
     Chinanutri(u64),
@@ -323,6 +323,84 @@ pub const CATALOG: &[Entry] = &[
         cooked_to_raw: false,
     },
 ];
+
+/// SR Legacy records for the foods that the primary sources leave sparse.
+///
+/// SR Legacy is the same USDA FoodData Central API under a different dataset,
+/// so these sit alongside `Source::Usda` rather than replacing it: the primary
+/// row stays authoritative for the nutrients it has, and the SR Legacy row only
+/// fills the gaps (amino acids, named fatty acids, pantothenic acid, choline,
+/// vitamin K, B12). Picked to match the primary record's food as closely as the
+/// two datasets allow; where they disagree on a shared nutrient they are
+/// genuinely different samples, which is why the merge never overwrites.
+pub const SR_LEGACY: &[(&str, u64)] = &[
+    ("BANANA", 173944),
+    ("BEEF", 171758),
+    ("BELL_PEPER", 170108),
+    ("BOKCHOY", 170390),
+    ("BROCCOLI", 170379),
+    ("CABBAGE", 169975),
+    ("CARROT", 170393),
+    ("CELERY", 169988),
+    ("CHICKEN_BREAST", 171140),
+    ("CHICKEN_THIGH", 172385),
+    ("CUCUMBER", 168409),
+    ("EGG", 171287),
+    ("EGGPLANT", 169228),
+    ("POTATO", 170026),
+    ("RICE", 169756),
+    ("SOY_MILK", 172446),
+    ("SWEET_POTATO", 168482),
+    ("ZUCCHINI", 169291),
+];
+
+/// The SR Legacy fdcId for a food, when one is curated.
+pub fn sr_legacy_id(name: &str) -> Option<u64> {
+    SR_LEGACY
+        .iter()
+        .find(|(food, _)| food.eq_ignore_ascii_case(name))
+        .map(|(_, id)| *id)
+}
+
+/// MEXT (Japan) `食品番号` for the foods this table shares with the Japanese
+/// food composition tables.
+///
+/// MEXT is the only source here that publishes iodine, biotin and pantothenic
+/// acid; the Chinese and USDA rows are still the primary data, and MEXT only
+/// fills the nutrients they leave out. Numbers are `日本食品標準成分表2020年版
+/// （八訂）` 食品番号 values.
+pub const MEXT: &[(&str, &str)] = &[
+    ("PORK", "11115"),
+    ("CHICKEN_BREAST", "11220"),
+    ("CHICKEN_THIGH", "11224"),
+    ("EGG", "12004"),
+    ("RICE", "01083"),
+    ("CARROT", "06214"),
+    ("CABBAGE", "06061"),
+    ("TOMATO", "06182"),
+    ("POTATO", "02063"),
+    ("SWEET_POTATO", "02006"),
+    ("CUCUMBER", "06065"),
+    ("EGGPLANT", "06191"),
+    ("ZUCCHINI", "06116"),
+    ("BANANA", "07107"),
+    ("BROCCOLI", "06263"),
+    ("CELERY", "06119"),
+    ("BELL_PEPER", "06247"),
+    ("SOY_MILK", "04052"),
+    ("SHITAKE", "08039"),
+    ("PUMPKIN", "06048"),
+    ("LUOBO", "06134"),
+    ("BOKCHOY", "06233"),
+    ("SOYBEAN_GREEN", "06015"),
+];
+
+/// The MEXT food number for a food, when one is curated.
+pub fn mext_number(name: &str) -> Option<&'static str> {
+    MEXT.iter()
+        .find(|(food, _)| food.eq_ignore_ascii_case(name))
+        .map(|(_, number)| *number)
+}
 
 /// Filter the catalog by the food names a caller asked for.
 ///

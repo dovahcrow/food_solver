@@ -1,0 +1,23 @@
+{
+    "ASH": 0.0042,
+    "CALCIUM": 4e-05,
+    "CARB": 0.8029999999999999,
+    "COPPER": 2.14e-06,
+    "ENERGY": 15020.56,
+    "FAT": 0.0103,
+    "FIBER": 0.001,
+    "IRON": 1.4000000000000001e-06,
+    "MAGNESIUM": 0.000265,
+    "MANGANESE": 9.810000000000001e-06,
+    "NIACIN": 1.43e-05,
+    "PHOSPHORUS": 0.00108,
+    "POTASSIUM": 0.00082,
+    "PROTEIN": 0.0704,
+    "SELENIUM": 6.6e-08,
+    "SODIUM": 0.0,
+    "VITAMIN_B1": 6.500000000000001e-07,
+    "VITAMIN_B2": 8.000000000000001e-07,
+    "VITAMIN_B6": 5.800000000000001e-07,
+    "ZINC": 1.3500000000000001e-05,
+    "__name__": "Rice, white, long grain, unenriched, raw"
+}

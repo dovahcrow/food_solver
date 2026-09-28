@@ -1,9 +1,13 @@
 //! Build script: turns the food database into Rust source.
 //!
-//! The Python frontends stay authoritative for the data. Rows are read from
-//! the cached `foods/*.json`, and the three foods that exist only as inline
-//! recipes in the Python source are hardcoded below. `src/foods.rs` includes
-//! the generated file.
+//! The cache holds one file per food per source, named
+//! `{FOOD}_{Source}.json` (for example `BAICAI_Chinanutri.json`,
+//! `BEEF_SrLegacy.json`). Every file is embedded here, keyed by its food and
+//! its source; which one a run actually uses is decided at runtime by the
+//! `CHOOSE` table in `src/foods.rs`, not at build time.
+//! The file name supplies the food and its source, so the JSON body is nothing
+//! but nutrients. The three foods that exist only as inline recipes are still
+//! hardcoded below. `src/foods.rs` includes the generated file.
 //!
 //! The nutrient field names are derived from `src/nutrient.rs`, so adding a
 //! nutrient to the enum is enough to have it flow through to the table.
@@ -145,10 +149,33 @@ fn snake_case(variant: &str) -> String {
     out
 }
 
-/// Every food's nutrient row, keyed by canonical name.
-fn read_rows(foods_dir: &Path, fields: &[String]) -> BTreeMap<String, BTreeMap<String, f64>> {
+/// The source suffixes a cache file may carry, longest first so the split on
+/// the last `_` cannot mistake part of a source name for a food name.
+const SOURCES: &[&str] = &["Chinanutri", "SrLegacy", "Inline", "Usda", "Mext"];
+
+/// Split `BAICAI_Chinanutri` into its food name and source.
+fn split_name(stem: &str) -> Option<(&str, &str)> {
+    for source in SOURCES {
+        if let Some(food) = stem.strip_suffix(&format!("_{source}")) {
+            if !food.is_empty() {
+                return Some((food, source));
+            }
+        }
+    }
+    None
+}
+
+/// Every cached row, keyed by its food and source.
+///
+/// Nothing is filtered here: the cache may hold several sources per food, and
+/// which one a run uses is a runtime decision (the `CHOOSE` table in
+/// `src/foods.rs`), not a build-time one.
+fn read_rows(
+    foods_dir: &Path,
+    fields: &[String],
+) -> BTreeMap<(String, String), BTreeMap<String, f64>> {
     let known: Vec<&str> = fields.iter().map(String::as_str).collect();
-    let mut rows = BTreeMap::new();
+    let mut rows: BTreeMap<(String, String), BTreeMap<String, f64>> = BTreeMap::new();
 
     let mut entries: Vec<PathBuf> = fs::read_dir(foods_dir)
         .unwrap_or_else(|error| panic!("read {}: {error}", foods_dir.display()))
@@ -158,13 +185,18 @@ fn read_rows(foods_dir: &Path, fields: &[String]) -> BTreeMap<String, BTreeMap<S
     entries.sort();
 
     for path in entries {
-        let name = path
+        let stem = path
             .file_stem()
             .and_then(|stem| stem.to_str())
-            .expect("food cache file name")
-            .to_owned();
+            .expect("food cache file name");
+        let Some((name, source)) = split_name(stem) else {
+            // A file that does not match the layout is ignored rather than
+            // guessed at.
+            continue;
+        };
         // Watch each cache file: the directory entry only catches new files.
         println!("cargo:rerun-if-changed={}", path.display());
+
         let text = fs::read_to_string(&path).expect("read food cache");
         let parsed: serde_json::Value = serde_json::from_str(&text)
             .unwrap_or_else(|error| panic!("parse {}: {error}", path.display()));
@@ -188,7 +220,13 @@ fn read_rows(foods_dir: &Path, fields: &[String]) -> BTreeMap<String, BTreeMap<S
                 .unwrap_or_else(|| panic!("{}: {key} is not a number", path.display()));
             row.insert(field, amount);
         }
-        rows.insert(name, row);
+        assert!(!row.is_empty(), "{} has no nutrient data", path.display());
+        assert!(
+            rows.insert((name.to_owned(), source.to_owned()), row)
+                .is_none(),
+            "{} duplicates a food/source row",
+            path.display()
+        );
     }
 
     for (name, overrides) in INLINE_FOODS {
@@ -198,39 +236,58 @@ fn read_rows(foods_dir: &Path, fields: &[String]) -> BTreeMap<String, BTreeMap<S
             assert!(known.contains(field), "inline food {name}: unknown {field}");
             row.insert((*field).to_owned(), *amount);
         }
-        rows.insert((*name).to_owned(), row);
+        rows.insert(((*name).to_owned(), "Inline".to_owned()), row);
     }
 
-    let empty: Vec<&str> = rows
-        .iter()
-        .filter(|(_, row)| row.is_empty())
-        .map(|(name, _)| name.as_str())
-        .collect();
     assert!(
-        empty.is_empty(),
-        "foods without nutrient data: {}",
-        empty.join(", ")
+        !rows.is_empty(),
+        "no food rows found under {}",
+        foods_dir.display()
     );
     rows
 }
 
 /// Render the Rust source that `src/foods.rs` includes.
-fn render(fields: &[String], rows: &BTreeMap<String, BTreeMap<String, f64>>) -> String {
+fn render(fields: &[String], rows: &BTreeMap<(String, String), BTreeMap<String, f64>>) -> String {
+    let mut names: Vec<&str> = rows.keys().map(|(name, _)| name.as_str()).collect();
+    names.dedup();
+    assert!(
+        names
+            .iter()
+            .all(|name| { rows.keys().any(|(food, _)| food == name) }),
+        "every food must keep at least one row"
+    );
+
+    let mut sources: Vec<&str> = rows.keys().map(|(_, source)| source.as_str()).collect();
+    sources.sort_unstable();
+    sources.dedup();
+
     let mut out = String::from(
         "// @generated by rust/food-core/build.rs -- do not edit.\n\
          //\n\
-         // Nutrient rows come from foods/*.json plus the inline recipes\n\
-         // hardcoded in build.rs. Field order follows the Nutrient enum.\n\n\
-         /// Every food known to the solver, sorted by name.\n\
+         // Every cached row, one per food per source, from foods/*.json plus\n\
+         // the inline recipes hardcoded in build.rs. Field order follows the\n\
+         // Nutrient enum. Which row a run uses is chosen at runtime.\n\n\
+         /// Every food name the solver knows, sorted and unique.\n\
          pub const FOOD_NAMES: &[&str] = &[\n",
     );
-    for name in rows.keys() {
+    for name in &names {
         let _ = writeln!(out, "    \"{name}\",");
     }
-    out.push_str("];\n\n/// The food table's rows, keyed by canonical name.\npub const FOOD_ROWS: &[(&str, Food)] = &[\n");
-    for (name, row) in rows {
+    out.push_str(
+        "];\n\n/// Every source tag present in the cache, sorted.\npub const FOOD_SOURCES: &[&str] = &[\n",
+    );
+    for source in &sources {
+        let _ = writeln!(out, "    \"{source}\",");
+    }
+    out.push_str(
+        "];\n\n/// One row per (food, source). `Food` field order follows the enum.\n\
+         pub const FOOD_ROWS: &[(&str, &str, Food)] = &[\n",
+    );
+    for ((name, source), row) in rows {
         out.push_str("    (\n");
         let _ = writeln!(out, "        \"{name}\",");
+        let _ = writeln!(out, "        \"{source}\",");
         out.push_str("        Food {\n");
         // `Food::default()` is not const-callable, so every field is spelled
         // out; a missing nutrient is `None`, which stays distinct from a

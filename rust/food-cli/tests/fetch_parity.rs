@@ -12,7 +12,7 @@
 #[allow(dead_code)] // the binary uses the network entry points; tests do not.
 mod fetch;
 
-use fetch::{to_cache_json, Row};
+use fetch::{to_cache_json, CacheFile, FoodSource, Row};
 
 /// Compare the parsed row against a sorted `(key, value)` expectation.
 fn assert_row(row: &Row, name: &str, expected: &[(&str, f64)]) {
@@ -88,7 +88,11 @@ fn china_pork_matches_the_python_cache() {
 fn cache_json_round_trips_like_python() {
     let body = include_str!("fixtures/usda_beef.json");
     let row = fetch::usda::parse(body).expect("parse USDA beef");
-    let text = to_cache_json(&row).expect("render cache json");
+    let file = CacheFile {
+        row,
+        source: FoodSource::Usda,
+    };
+    let text = to_cache_json(&file).expect("render cache json");
     // Same shape the Python `json.dump(..., indent=4, sort_keys=True)` writes:
     // the display name is a `__name__` key, and keys are sorted.
     let parsed: serde_json::Value = serde_json::from_str(&text).expect("valid json");
@@ -97,6 +101,9 @@ fn cache_json_round_trips_like_python() {
         serde_json::json!("Beef, round, top round, boneless, choice, raw")
     );
     assert_eq!(parsed["ENERGY"], serde_json::json!(5899.44));
+    // The body is nutrients plus `__name__` only; provenance is the file name.
+    assert!(parsed.get("source").is_none());
+    assert!(parsed.get("choose").is_none());
     let keys: Vec<&str> = parsed
         .as_object()
         .unwrap()
@@ -172,15 +179,137 @@ fn python_float_spelling() {
         (1e16, "1e+16"),
     ];
     for (value, expected) in cases {
-        let text = to_cache_json(&Row {
-            name: "x".to_string(),
-            nutrients: vec![("PROTEIN", value)],
-            skipped: Vec::new(),
+        let text = to_cache_json(&CacheFile {
+            row: Row {
+                name: "x".to_string(),
+                nutrients: vec![("PROTEIN", value)],
+                skipped: Vec::new(),
+            },
+            source: FoodSource::Usda,
         })
         .expect("render");
         assert!(
             text.contains(&format!(": {expected}")),
             "value {value}: expected {expected} in {text}"
         );
+    }
+}
+
+/// Compare a parsed value against an expected amount reported per 100 g.
+///
+/// SR Legacy publishes per 100 g and the getter divides by 100, so the result
+/// carries ordinary binary-float noise; compare with a relative tolerance
+/// instead of exact equality.
+fn assert_per_100g(actual: Option<f64>, expected: f64, label: &str) {
+    let actual = actual.unwrap_or_else(|| panic!("{label} missing"));
+    let want = expected / 100.0;
+    assert!(
+        (actual - want).abs() <= want.abs() * 1e-12,
+        "{label}: expected {want}, got {actual}"
+    );
+}
+
+#[test]
+fn sr_legacy_egg_parses_the_amino_acid_panel() {
+    // The amino-acid panel the portal view omits, which is the whole reason SR
+    // Legacy is here.
+    let body = include_str!("fixtures/sr_legacy_egg.json");
+    let row = fetch::sr_legacy::parse(body).expect("parse SR Legacy egg");
+    assert_eq!(row.name, "Egg, whole, raw, fresh");
+    let get = |key: &str| {
+        row.nutrients
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| *v)
+    };
+
+    assert_per_100g(get("PROTEIN"), 12.6, "PROTEIN");
+    assert_per_100g(get("FAT"), 9.51, "FAT");
+    assert_per_100g(get("TRYPTOPHAN"), 0.167, "TRYPTOPHAN");
+    assert_per_100g(get("LYSINE"), 0.912, "LYSINE");
+    assert_per_100g(get("CYSTINE"), 0.272, "CYSTINE");
+    assert_per_100g(get("METHIONINE"), 0.38, "METHIONINE");
+    assert_per_100g(get("LEUCINE"), 1.09, "LEUCINE");
+
+    // Pantothenic acid lands on B5 (the solver's key), never on a legacy
+    // duplicate alias, so the vitamin cannot be counted twice.
+    assert_eq!(get("PANTOTHENIC_ACID"), None);
+    assert_per_100g(get("VITAMIN_B5"), 0.00153, "VITAMIN_B5"); // mg per 100 g
+                                                               // Vitamin K has no primary-source row at all, so SR Legacy fills it.
+    assert_per_100g(get("VITAMIN_K"), 3e-7, "VITAMIN_K"); // 0.3 µg per 100 g
+    assert_per_100g(get("CHOLINE"), 0.294, "CHOLINE"); // mg per 100 g
+
+    // Named fatty acids come through; the unnamed totals stay dropped, because
+    // an unspecified `18:2` is not safely linoleic acid.
+    assert_eq!(get("PUFA 18:2"), None);
+    assert_per_100g(get("LINOLEIC_ACID"), 1.53, "LINOLEIC_ACID");
+    assert_per_100g(get("ALPHA_LINOLENIC_ACID"), 0.036, "ALPHA_LINOLENIC_ACID");
+
+    // Energy is reported under one name in both kJ and kcal; the row must carry
+    // it exactly once.
+    let energy_rows = row.nutrients.iter().filter(|(k, _)| *k == "ENERGY").count();
+    assert_eq!(energy_rows, 1, "ENERGY must not be duplicated");
+}
+
+#[test]
+fn sr_legacy_rice_parses_the_amino_acid_panel() {
+    let body = include_str!("fixtures/sr_legacy_rice.json");
+    let row = fetch::sr_legacy::parse(body).expect("parse SR Legacy rice");
+    assert_eq!(
+        row.name,
+        "Rice, white, long-grain, regular, raw, unenriched"
+    );
+    let get = |key: &str| {
+        row.nutrients
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| *v)
+    };
+    assert_per_100g(get("PROTEIN"), 7.13, "PROTEIN");
+    assert_per_100g(get("TRYPTOPHAN"), 0.083, "TRYPTOPHAN");
+    assert_per_100g(get("LYSINE"), 0.258, "LYSINE");
+    assert_per_100g(get("METHIONINE"), 0.168, "METHIONINE");
+    assert_per_100g(get("VITAMIN_B5"), 0.00101, "VITAMIN_B5"); // mg per 100 g
+}
+
+#[test]
+fn curated_tables_only_name_catalog_foods() {
+    // Every curated secondary source must point at a food the catalog knows,
+    // and the choose table must name a real source.
+    for (name, id) in fetch::catalog::SR_LEGACY {
+        assert!(
+            fetch::CATALOG.iter().any(|e| e.name == *name),
+            "{name} is curated but not in the catalog"
+        );
+        assert!(*id > 0, "{name} has no fdcId");
+    }
+    for (name, number) in fetch::catalog::MEXT {
+        assert!(
+            fetch::CATALOG.iter().any(|e| e.name == *name),
+            "{name} is curated but not in the catalog"
+        );
+        assert_eq!(number.len(), 5, "{name} has a malformed MEXT number");
+    }
+    for (name, source) in food_core::foods::CHOOSE {
+        assert!(
+            fetch::CATALOG.iter().any(|e| e.name == *name),
+            "{name} has a choose entry but is not in the catalog"
+        );
+        assert!(
+            FoodSource::parse(source).is_some(),
+            "{name} chooses unknown source {source}"
+        );
+    }
+}
+
+#[test]
+fn file_names_round_trip_through_the_source_tag() {
+    // `{FOOD}_{Source}.json` is the on-disk contract build.rs re-parses.
+    for (name, source) in food_core::foods::CHOOSE {
+        let file = format!("{name}_{}.json", source);
+        let stem = file.trim_end_matches(".json");
+        let (food, tag) = stem.rsplit_once('_').expect("file has a source suffix");
+        assert_eq!(food, *name);
+        assert_eq!(FoodSource::parse(tag), FoodSource::parse(source));
     }
 }

@@ -16,6 +16,7 @@ serde_json = { workspace = true }
 ureq = { workspace = true }
 scraper = { workspace = true }
 regex = { workspace = true }
+calamine = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
