@@ -6,8 +6,11 @@ were removed with the module they covered.
 
 import unittest
 
+import click
+
 from src import report
 from src.food import Food
+from src.__main__ import parse_ingredient
 from src.planner import (
     IngredientSpec,
     PlanRequest,
@@ -17,7 +20,7 @@ from src.planner import (
     resolve_food,
 )
 
-# Mirrors the reference batch the CLI uses when no --ingredient is given.
+# The reference batch, pinned so the planner tests are reproducible.
 FIXED = [(Food.CELERY, 245.0), (Food.JIANGDOU, 411.0), (Food.PORK, 500.0)]
 
 
@@ -109,3 +112,40 @@ class CliOutputTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ParseIngredientTests(unittest.TestCase):
+    """The `-i` value accepts fixed, optional and minimize suffixes."""
+
+    def test_bare_grams_is_fixed(self):
+        spec = parse_ingredient("PORK:500")
+        self.assertEqual((spec.lower, spec.upper), (500.0, 500.0))
+        self.assertFalse(spec.minimize_usage)
+
+    def test_optional_opens_the_lower_bound(self):
+        spec = parse_ingredient("PORK:500:optional")
+        self.assertEqual((spec.lower, spec.upper), (0.0, 500.0))
+        self.assertFalse(spec.minimize_usage)
+
+    def test_minimize_is_optional_with_a_preference(self):
+        for suffix in ("minimize", "min"):
+            with self.subTest(suffix=suffix):
+                spec = parse_ingredient(f"PORK:500:{suffix}")
+                self.assertEqual((spec.lower, spec.upper), (0.0, 500.0))
+                self.assertTrue(spec.minimize_usage)
+
+    def test_explicit_fixed(self):
+        spec = parse_ingredient("PORK:500:fixed")
+        self.assertEqual((spec.lower, spec.upper), (500.0, 500.0))
+        self.assertFalse(spec.minimize_usage)
+
+    def test_unknown_suffix_is_rejected(self):
+        with self.assertRaises(click.BadParameter):
+            parse_ingredient("PORK:500:weird")
+
+    def test_unknown_food_is_rejected(self):
+        with self.assertRaises(click.BadParameter):
+            parse_ingredient("NOPE:10")
+
+    def test_non_numeric_grams_is_rejected(self):
+        with self.assertRaises(click.BadParameter):
+            parse_ingredient("PORK:abc")

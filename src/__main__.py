@@ -27,10 +27,13 @@ logging.basicConfig(
 
 
 def parse_ingredient(value: str) -> IngredientSpec:
-    """Parse ``FOOD:GRAMS`` or ``FOOD:GRAMS:optional`` into a spec.
+    """Parse ``FOOD:GRAMS[:optional|minimize|fixed]`` into a spec.
 
-    The upper bound is the batch weight; an optional ingredient may also be
-    left out entirely, and ``minimize_usage`` prefers less of it.
+    The upper bound is the batch weight. ``fixed`` (the default) pins the
+    weight exactly; ``optional`` allows any amount from 0 up to it; ``minimize``
+    is optional and additionally prefers less of it among equally good recipes.
+    ``minimize`` is only meaningful for an ingredient that may be left out, so
+    it behaves like ``optional`` plus the preference.
     """
     parts = value.split(":")
     if len(parts) not in (2, 3):
@@ -47,12 +50,17 @@ def parse_ingredient(value: str) -> IngredientSpec:
         raise click.BadParameter(f"{parts[1]!r} is not a number of grams") from None
     if grams < 0:
         raise click.BadParameter("grams must not be negative")
-    optional = len(parts) == 3 and parts[2].lower() in ("1", "true", "yes", "optional")
-    if len(parts) == 3 and not optional and parts[2].lower() not in ("0", "false", "no"):
-        raise click.BadParameter(f"{parts[2]!r} is not a boolean flag")
-    if optional:
-        return IngredientSpec.optional_upto(food, grams)
-    return IngredientSpec.fixed(food, grams)
+    if len(parts) == 2:
+        return IngredientSpec.fixed(food, grams)
+    match parts[2].lower():
+        case "optional" | "opt" | "true" | "1" | "yes":
+            return IngredientSpec.optional_upto(food, grams)
+        case "minimize" | "min":
+            return IngredientSpec.optional_upto(food, grams, minimize_usage=True)
+        case "fixed" | "false" | "0" | "no":
+            return IngredientSpec.fixed(food, grams)
+        case other:
+            raise click.BadParameter(f"{other!r} is not optional, minimize or fixed")
 
 
 @click.group()
@@ -96,21 +104,16 @@ def refresh_foods(foods):
 @click.option("--active/--no-active", default=False,
               help="Select the 110 kcal/kg^0.75 profile instead of 95.")
 @click.option(
-    "-i", "--ingredient", "ingredients", multiple=True,
+    "-i", "--ingredient", "ingredients", multiple=True, required=True,
     metavar="FOOD:GRAMS[:optional]",
-    help="Add an ingredient. A fixed weight must be used exactly; an optional "
-         "one may be any amount up to GRAMS. Repeat for every ingredient.",
+    help="Add an ingredient as FOOD:GRAMS[:optional|minimize|fixed]. A fixed "
+         "weight must be used exactly; an optional one may be any amount up to "
+         "GRAMS; `minimize` marks an optional ingredient to use minimally. "
+         "Repeat for every ingredient; at least one is required.",
 )
 def opt(day, detail, daily_kcal, weight, age, active, ingredients):
-    """Solve a batch from the ingredients given with --ingredient.
-
-    With no --ingredient the CLI reproduces the historical CELERY, JIANGDOU,
-    PORK, RICE, CANOLA_OIL, SALT, EGG_SHELL_POWDER and EGG batch.
-    """
-    if ingredients:
-        specs = [parse_ingredient(value) for value in ingredients]
-    else:
-        specs = default_ingredients(day)
+    """Solve a batch from the ingredients given with --ingredient."""
+    specs = [parse_ingredient(value) for value in ingredients]
 
     request = PlanRequest(
         ingredients=specs,
@@ -130,26 +133,6 @@ def opt(day, detail, daily_kcal, weight, age, active, ingredients):
     # historical plain-print output.
     for line in report.format_recipe(result) + report.format_nutrition(result, detail):
         click.echo(line, color=True)
-
-
-def default_ingredients(day: int) -> list[IngredientSpec]:
-    """The reference batch used before the CLI accepted explicit ingredients."""
-    fixed = [
-        (Food.CELERY, 245),
-        (Food.JIANGDOU, 411),
-        (Food.PORK, 500),
-    ]
-    optional = [
-        (Food.RICE, 1000 * day),
-        (Food.CANOLA_OIL, 5 * day),
-        (Food.SALT, 2 * day),
-        (Food.EGG_SHELL_POWDER, 5 * day),
-        (Food.EGG, 100 * day),
-    ]
-    return [IngredientSpec.fixed(food, grams) for food, grams in fixed] + [
-        IngredientSpec.optional_upto(food, grams, minimize_usage=True)
-        for food, grams in optional
-    ]
 
 
 if __name__ == "__main__":

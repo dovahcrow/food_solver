@@ -178,6 +178,8 @@ CLI 支持 `-d/--day`、`--detail`、`--daily-kcal`、`--weight`、`--age`、
 求解时必须至少给一个 `-i`（不再有内置默认批次）。`food fetch --list`
 列出全部食材，`food fetch` 刷新食材缓存。
 
+Python 参考实现（`just opt`）同样要求至少一个 `-i`，后缀语义一致。
+
 ## Python 参考实现
 
 `src/` 仍保留为 Python 参考实现，主要用来和 Rust 结果对照：`just opt -d 10`
