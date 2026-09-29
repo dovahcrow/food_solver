@@ -6,6 +6,7 @@
     "ENERGY": 836.8,
     "FAT": 0.0023,
     "FIBER": 0.013000000000000001,
+    "FOLIC_ACID": 6.8e-07,
     "IRON": 4.4e-06,
     "MAGNESIUM": 0.000136,
     "MANGANESE": 1.9600000000000003e-06,
@@ -13,6 +14,7 @@
     "POTASSIUM": 0.00228,
     "PROTEIN": 0.0102,
     "SODIUM": 0.00014000000000000001,
+    "VITAMIN_C": 0.000303,
     "ZINC": 2.7e-06,
     "__name__": "Cabbage, bok choy, raw"
 }

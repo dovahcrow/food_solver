@@ -6,6 +6,7 @@
     "ENERGY": 1087.84,
     "FAT": 0.0012,
     "FIBER": 0.024,
+    "FOLIC_ACID": 2e-07,
     "IRON": 0.0,
     "MAGNESIUM": 0.000135,
     "MANGANESE": 1.06e-06,
@@ -13,6 +14,7 @@
     "POTASSIUM": 0.00222,
     "PROTEIN": 0.0085,
     "SODIUM": 0.0,
+    "VITAMIN_C": 8e-06,
     "ZINC": 1.2e-06,
     "__name__": "Eggplant, raw"
 }
