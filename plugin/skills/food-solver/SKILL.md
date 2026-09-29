@@ -31,6 +31,15 @@ solved recipe and a per-day nutrient report for adult dogs.
 - `optional: true` lets the solver choose anything from 0 up to `grams`.
   `minimize_usage: true` prefers less of that ingredient among equally good
   recipes.
+- When a nutrient line reports `maximum_is_implicit: true`, treat its maximum
+  as `inf`: the value shown is only the solver's soft preference, not a real
+  ceiling, so exceeding it is not a problem.
+- When the user says an ingredient should be given "in a suitable amount"
+  (适量), set `optional: true` and let the solver pick the weight.
+- When the user says an ingredient should be given "without limit" (不限量),
+  set `grams` to 1000 * `days` and `minimize_usage: true`, with
+  `optional: true`; the solver then has room to use as much as the recipe
+  needs while still preferring less.
 - Use `get_needs` to show the raw requirement table for a profile.
 - Use `build_info` when a result needs to be tied to a specific build: it
   returns the build date and git revision the server was compiled from.
