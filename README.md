@@ -223,3 +223,7 @@ just release-plugin              # musl 静态构建 + 打包 dist/food-solver-m
 模板，而不是安装后的副本。
 
 `just mcp` 可以在当前仓库以 stdio 方式跑同一个 MCP 服务，便于本地调试。
+
+## Add food
+
+In `catalog.rs` add a new entry to `SR_LEGACY` and `CATALOG`. Then in `foods.rs` add a new entry to `CHOOSE`. Check commit 16ce330e for details.
