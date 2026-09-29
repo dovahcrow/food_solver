@@ -116,9 +116,9 @@ if __name__ == "__main__":
 class ParseIngredientTests(unittest.TestCase):
     """The `-i` value accepts fixed, optional and minimize suffixes."""
 
-    def test_bare_grams_is_fixed(self):
+    def test_bare_grams_is_optional(self):
         spec = parse_ingredient("PORK:500")
-        self.assertEqual((spec.lower, spec.upper), (500.0, 500.0))
+        self.assertEqual((spec.lower, spec.upper), (0.0, 500.0))
         self.assertFalse(spec.minimize_usage)
 
     def test_optional_opens_the_lower_bound(self):

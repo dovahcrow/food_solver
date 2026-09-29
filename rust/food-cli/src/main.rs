@@ -126,13 +126,14 @@ struct CmdSolve {
     #[arg(long, default_value_t = false, action = ArgAction::Set)]
     active: bool,
 
-    /// Add an ingredient as FOOD:GRAMS[:optional]. A fixed weight must be used
-    /// exactly; an optional one may be any amount up to GRAMS. Repeat per
-    /// ingredient; `minimize` marks an optional ingredient to use minimally.
+    /// Add an ingredient as FOOD:GRAMS[:optional|minimize|fixed]. Without a
+    /// suffix the weight is an upper bound: the solver may use any amount up
+    /// to GRAMS. `fixed` pins the weight exactly; `minimize` also prefers less
+    /// of it. Repeat per ingredient.
     #[arg(
         short = 'i',
         long = "ingredient",
-        value_name = "FOOD:GRAMS[:optional]",
+        value_name = "FOOD:GRAMS[:optional|minimize|fixed]",
         required = true
     )]
     ingredient: Vec<IngredientInput>,
@@ -329,7 +330,7 @@ impl CmdReport {
         for item in &self.ingredient {
             if item.kind != IngredientKind::Fixed {
                 throw!(anyhow!(
-                    "`report` needs an exact weight for {}; drop the suffix",
+                    "`report` needs an exact weight for {}; add the :fixed suffix",
                     item.food.name()
                 ));
             }
@@ -414,7 +415,7 @@ struct IngredientInput {
 enum IngredientKind {
     /// The weight must be used exactly.
     Fixed,
-    /// Any amount from 0 up to the weight.
+    /// Any amount from 0 up to the weight; the default when no suffix is given.
     Optional,
     /// Optional, and prefer less of it among otherwise equivalent recipes.
     Minimize,
@@ -439,7 +440,7 @@ impl FromStr for IngredientInput {
         let parts: Vec<&str> = spec.split(':').collect();
         if parts.len() < 2 || parts.len() > 3 {
             return Err(format!(
-                "{spec:?} must be FOOD:GRAMS or FOOD:GRAMS:optional"
+                "{spec:?} must be FOOD:GRAMS[:optional|minimize|fixed]"
             ));
         }
         let food = FoodName::parse(parts[0])
@@ -450,8 +451,10 @@ impl FromStr for IngredientInput {
         if !grams.is_finite() || grams < 0.0 {
             return Err("grams must be a non-negative number".to_string());
         }
+        // A bare `FOOD:GRAMS` is an upper bound, not a pinned weight: only an
+        // explicit `:fixed` makes the weight exact.
         let kind = if parts.len() == 2 {
-            IngredientKind::Fixed
+            IngredientKind::Optional
         } else {
             match parts[2].to_ascii_lowercase().as_str() {
                 "optional" | "opt" | "true" | "1" | "yes" => IngredientKind::Optional,

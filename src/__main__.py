@@ -29,16 +29,17 @@ logging.basicConfig(
 def parse_ingredient(value: str) -> IngredientSpec:
     """Parse ``FOOD:GRAMS[:optional|minimize|fixed]`` into a spec.
 
-    The upper bound is the batch weight. ``fixed`` (the default) pins the
-    weight exactly; ``optional`` allows any amount from 0 up to it; ``minimize``
-    is optional and additionally prefers less of it among equally good recipes.
-    ``minimize`` is only meaningful for an ingredient that may be left out, so
-    it behaves like ``optional`` plus the preference.
+    The upper bound is the batch weight. Without a suffix the weight is an
+    upper bound: ``optional`` (the default) allows any amount from 0 up to it.
+    ``fixed`` pins the weight exactly; ``minimize`` is optional and
+    additionally prefers less of it among equally good recipes. ``minimize`` is
+    only meaningful for an ingredient that may be left out, so it behaves like
+    ``optional`` plus the preference.
     """
     parts = value.split(":")
     if len(parts) not in (2, 3):
         raise click.BadParameter(
-            f"{value!r} must be FOOD:GRAMS or FOOD:GRAMS:optional"
+            f"{value!r} must be FOOD:GRAMS[:optional|minimize|fixed]"
         )
     try:
         food = resolve_food(parts[0])
@@ -50,8 +51,10 @@ def parse_ingredient(value: str) -> IngredientSpec:
         raise click.BadParameter(f"{parts[1]!r} is not a number of grams") from None
     if grams < 0:
         raise click.BadParameter("grams must not be negative")
+    # A bare ``FOOD:GRAMS`` is an upper bound, not a pinned weight: only an
+    # explicit ``:fixed`` makes the weight exact.
     if len(parts) == 2:
-        return IngredientSpec.fixed(food, grams)
+        return IngredientSpec.optional_upto(food, grams)
     match parts[2].lower():
         case "optional" | "opt" | "true" | "1" | "yes":
             return IngredientSpec.optional_upto(food, grams)
@@ -106,10 +109,10 @@ def refresh_foods(foods):
 @click.option(
     "-i", "--ingredient", "ingredients", multiple=True, required=True,
     metavar="FOOD:GRAMS[:optional]",
-    help="Add an ingredient as FOOD:GRAMS[:optional|minimize|fixed]. A fixed "
-         "weight must be used exactly; an optional one may be any amount up to "
-         "GRAMS; `minimize` marks an optional ingredient to use minimally. "
-         "Repeat for every ingredient; at least one is required.",
+    help="Add an ingredient as FOOD:GRAMS[:optional|minimize|fixed]. Without a "
+         "suffix the weight is an upper bound: the solver may use any amount up "
+         "to GRAMS. `fixed` pins the weight exactly; `minimize` also prefers "
+         "less of it. Repeat for every ingredient; at least one is required.",
 )
 def opt(day, detail, daily_kcal, weight, age, active, ingredients):
     """Solve a batch from the ingredients given with --ingredient."""
