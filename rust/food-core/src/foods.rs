@@ -183,7 +183,7 @@ pub const CHOOSE: &[(FoodName, FoodSource)] = &[
     (FoodName::BALANCEIT, FoodSource::Inline),
     (FoodName::BANANA, FoodSource::SrLegacy),
     (FoodName::BARF, FoodSource::Inline),
-    (FoodName::BASA_FISH, FoodSource::Chinanutri),
+    (FoodName::BASA_FISH, FoodSource::SrLegacy),
     (FoodName::BEEF, FoodSource::SrLegacy),
     (FoodName::BEEN_SPROUT, FoodSource::Chinanutri),
     (FoodName::BELL_PEPER, FoodSource::SrLegacy),

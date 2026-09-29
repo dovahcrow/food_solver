@@ -130,7 +130,7 @@ impl Profile {
         needs.insert(Nutrient::Valine, soft_optional(g(1.71, 1.48), None));
         needs.insert(Nutrient::VitaminB5, soft(mg(4.11, 3.55), None));
         needs.insert(Nutrient::FolicAcid, soft(mcg(74.70, 64.50), None));
-        needs.insert(Nutrient::Chloride, soft(g(0.43, 0.38), None));
+        needs.insert(Nutrient::Chloride, soft_optional(g(0.43, 0.38), None));
 
         needs.insert(
             Nutrient::Energy,
@@ -178,7 +178,7 @@ impl Profile {
             ),
         );
         needs.insert(Nutrient::Copper, soft(mg(2.08, 1.80), None));
-        needs.insert(Nutrient::Iodine, soft(mg(0.30, 0.26), None));
+        needs.insert(Nutrient::Iodine, soft_optional(mg(0.30, 0.26), None));
         needs.insert(Nutrient::Zinc, soft(mg(20.80, 18.00), None));
         needs.insert(Nutrient::Choline, soft_optional(mg(474.0, 409.0), None));
         needs.insert(Nutrient::Iron, soft(mg(10.40, 9.00), None));
