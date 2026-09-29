@@ -328,6 +328,7 @@ fn csc_from_rows(nrows: usize, ncols: usize, rows: &[Row]) -> CscMatrix<f64> {
 /// [Clarabel]: https://github.com/oxfordcontrol/Clarabel.rs
 #[throws(Error)]
 pub fn solve(problem: &Problem) -> Solution {
+    assert!(problem.implicit_soft_upper_multiplier.unwrap_or(1.) >= 1.);
     let foods = &problem.foods;
     let n = foods.len();
     if n == 0 {
