@@ -328,13 +328,7 @@ impl CmdReport {
         // A report describes an exact batch, so only fixed weights make sense.
         let mut ingredients = Vec::new();
         for item in &self.ingredient {
-            if item.kind != IngredientKind::Fixed {
-                throw!(anyhow!(
-                    "`report` needs an exact weight for {}; add the :fixed suffix",
-                    item.food.name()
-                ));
-            }
-            ingredients.push(item.spec());
+            ingredients.push(item.force_fixed());
         }
 
         let request = PlanRequest {
@@ -429,6 +423,10 @@ impl IngredientInput {
             IngredientKind::Optional => IngredientSpec::optional_upto(self.food, self.grams),
             IngredientKind::Minimize => IngredientSpec::minimize(self.food, self.grams),
         }
+    }
+
+    fn force_fixed(self) -> IngredientSpec {
+        IngredientSpec::fixed(self.food, self.grams)
     }
 }
 
