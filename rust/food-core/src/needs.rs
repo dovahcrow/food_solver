@@ -12,9 +12,9 @@ use std::collections::BTreeMap;
 use anyhow::{anyhow, Error};
 use culpa::{throw, throws};
 
-use crate::nutrient::Nutrient;
 use crate::recipe::{NeedRequired, NeedSoftness, Requirement};
 use crate::units::{G, KCAL, MCG, MG, VITAMIN_A_IU, VITAMIN_D_IU, VITAMIN_E_IU};
+use food_base::Nutrient;
 
 /// Dog profile selecting the requirement table.
 #[derive(Debug, Clone, Copy, PartialEq)]

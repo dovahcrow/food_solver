@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::foods::Food;
+use crate::food::Food;
 
 /// Every nutrient the solver understands, in canonical order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -236,3 +236,67 @@ pub fn nutrient_value(food: &Food, nutrient: Nutrient) -> (Option<f64>, bool) {
     }
     (None, false)
 }
+
+/// `Food`'s field names, one per [`Nutrient`], in enum-declaration order.
+///
+/// The build script writes these as struct-literal keys, so the order and
+/// spelling here decide the generated table. Each name must match the field it
+/// documents; the generated `Food { .. }` literals fail to compile when they
+/// drift apart.
+pub const NUTRIENT_FIELDS: &[&str] = &[
+    "energy",
+    "protein",
+    "fat",
+    "cholesterol",
+    "ash",
+    "carb",
+    "fiber",
+    "calcium",
+    "phosphorus",
+    "potassium",
+    "sodium",
+    "magnesium",
+    "iron",
+    "zinc",
+    "selenium",
+    "copper",
+    "manganese",
+    "iodine",
+    "chloride",
+    "vitamin_a",
+    "vitamin_c",
+    "vitamin_d",
+    "vitamin_e",
+    "vitamin_k",
+    "vitamin_b1",
+    "vitamin_b2",
+    "vitamin_b5",
+    "vitamin_b6",
+    "vitamin_b7",
+    "vitamin_b12",
+    "niacin",
+    "pantothenic_acid",
+    "folic_acid",
+    "choline",
+    "carotene",
+    "arginine",
+    "histidine",
+    "isoleucine",
+    "leucine",
+    "lysine",
+    "methionine",
+    "cystine",
+    "phenylalanine",
+    "tyrosine",
+    "threonine",
+    "tryptophan",
+    "valine",
+    "methionine_cystine",
+    "phenylalanine_tyrosine",
+    "linoleic_acid",
+    "alpha_linolenic_acid",
+    "arachidonic_acid",
+    "epa",
+    "dha",
+    "epa_dha",
+];

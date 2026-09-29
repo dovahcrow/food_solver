@@ -18,6 +18,8 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use food_base::NUTRIENT_FIELDS;
+
 /// Foods that have no JSON cache; they are defined inline here.
 ///
 /// Only the overridden nutrients are listed; every other nutrient is a
@@ -111,15 +113,15 @@ const INLINE_FOODS: &[(&str, &[(&str, f64)])] = &[
 fn main() {
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let foods_dir = manifest.join("../../foods");
-    let nutrient_source = manifest.join("src/nutrient.rs");
     let output = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("foods_data.rs");
 
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed={}", nutrient_source.display());
     println!("cargo:rerun-if-changed={}", foods_dir.display());
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
 
-    let fields = nutrient_fields(&nutrient_source);
+    // The field list comes from `food-base` as a Rust constant, so this
+    // script never has to parse source text.
+    let fields: Vec<String> = NUTRIENT_FIELDS.iter().map(|f| (*f).to_string()).collect();
     let rows = read_rows(&foods_dir, &fields);
     fs::write(&output, render(&fields, &rows)).expect("write generated food table");
 
@@ -196,50 +198,6 @@ fn git_sha(manifest: &Path) -> String {
         .map(|text| text.trim().to_string())
         .filter(|text| !text.is_empty())
         .unwrap_or_else(|| "unknown".to_string())
-}
-
-/// `Food`'s field names, in `Nutrient` enum order.
-fn nutrient_fields(source: &Path) -> Vec<String> {
-    let text = fs::read_to_string(source).expect("read src/nutrient.rs");
-    let body = text
-        .split_once("pub enum Nutrient {")
-        .expect("Nutrient enum")
-        .1;
-    let body = body.split_once("\n}").expect("Nutrient enum end").0;
-    let fields: Vec<String> = body
-        .lines()
-        .filter_map(|line| {
-            let variant = line.trim().trim_end_matches(',').trim();
-            let looks_like_variant = variant
-                .chars()
-                .next()
-                .is_some_and(|first| first.is_ascii_uppercase())
-                && variant.chars().all(|c| c.is_ascii_alphanumeric());
-            looks_like_variant.then(|| snake_case(variant))
-        })
-        .collect();
-    assert!(!fields.is_empty(), "no nutrients found in {source:?}");
-    fields
-}
-
-/// `VitaminB12` -> `vitamin_b12`, `EpaDha` -> `epa_dha`.
-fn snake_case(variant: &str) -> String {
-    let chars: Vec<char> = variant.chars().collect();
-    let mut out = String::new();
-    for (index, &char) in chars.iter().enumerate() {
-        if char.is_ascii_uppercase() && index > 0 {
-            let previous = chars[index - 1];
-            let following = chars.get(index + 1).copied();
-            if previous.is_ascii_lowercase()
-                || previous.is_ascii_digit()
-                || following.is_some_and(|next| next.is_ascii_lowercase())
-            {
-                out.push('_');
-            }
-        }
-        out.push(char.to_ascii_lowercase());
-    }
-    out
 }
 
 /// The source suffixes a cache file may carry, longest first so the split on

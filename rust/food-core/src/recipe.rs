@@ -26,9 +26,10 @@ use clarabel::solver::{DefaultSettings, DefaultSolver, IPSolver, NonnegativeCone
 use anyhow::{anyhow, Error};
 use culpa::{throw, throws};
 
-use crate::foods::{Food, FoodName};
-use crate::nutrient::{nutrient_value, Nutrient};
+use crate::foods::FoodName;
 use crate::units::{G, MCG, MG};
+use food_base::Food;
+use food_base::{nutrient_value, Nutrient};
 
 /// Whether a nutrient must be satisfied, or is only reported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

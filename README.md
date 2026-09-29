@@ -123,6 +123,11 @@ just refresh-foods --list                    # 列出食材、可用来源与当
 
 求解器现在是 Rust 工作区，规划逻辑在一个库里，CLI 和 MCP 是它的两个前端：
 
+- `rust/food-base/`：`Nutrient` 枚举、`Food` 结构体与 `nutrient_value`，以及
+  字段名表 `NUTRIENT_FIELDS`。它单独成 crate 是因为构建脚本不能依赖它正在
+  构建的那个 crate：`food-core` 的 `build.rs` 需要这份字段表来生成内嵌数据，
+  把共享词汇放在两者之下就避免了解析源码。字段表与枚举的一致性由
+  `rust/food-base/tests/fields.rs` 锁住。
 - `rust/food-core/`：`PlanRequest`（食材 + 天数 + 犬只档案）进，`PlanResult`
   （配方 + 每日营养报告）出。`IngredientSpec` 用上下界描述食材：相等即固定
   用量，`0 ~ 上限` 表示可选。数量都是**整批克数**，`days` 只缩放需求。
@@ -145,7 +150,8 @@ just refresh-foods --list                    # 列出食材、可用来源与当
   换来源只改 `CHOOSE` 一行并重建，不必重新抓取。
 - `rust/food-core/build.rs`：构建时读取 `foods/{FOOD}_{Source}.json`（外加
   `build.rs` 里几条内联配方）生成内嵌食材营养表，`foods.rs` 再用 `include!`
-  引进来。
+  引进来。字段名取自 `food-base::NUTRIENT_FIELDS`；生成的 `Food { .. }`
+  字面量会写出每个字段，所以字段表与结构体一旦不一致就会编译失败。
 
 求解器用 [Clarabel](https://github.com/oxfordcontrol/Clarabel.rs)（牛津大学，
 CVXPY 也用它）。目标函数：只有下限的软需求用 `max(0, (L - y) / L)^2`，有上下

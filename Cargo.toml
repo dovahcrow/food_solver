@@ -1,5 +1,5 @@
 [workspace]
-members = ["rust/food-core", "rust/food-cli", "rust/food-mcp"]
+members = ["rust/food-base", "rust/food-core", "rust/food-cli", "rust/food-mcp"]
 resolver = "2"
 
 [workspace.package]

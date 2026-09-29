@@ -5,11 +5,11 @@ use culpa::{throw, throws};
 
 use crate::foods::{FoodName, FOODS};
 use crate::needs::{scale, Profile};
-use crate::nutrient::Nutrient;
 use crate::recipe::{
     nutrition_report, solve, FoodRow, NutrientReport, Problem, RatioConstraint, Requirement,
 };
 use crate::{CA_P_RATIO_MAX, CA_P_RATIO_MIN, MAX_DAYS};
+use food_base::Nutrient;
 
 /// One ingredient of the batch. Bounds are batch grams: equal bounds pin a
 /// mandatory weight, `[0, upper]` lets the solver choose freely.
