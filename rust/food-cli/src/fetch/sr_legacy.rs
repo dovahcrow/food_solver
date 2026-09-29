@@ -18,12 +18,6 @@ use super::nutrients::map_sr_legacy_name;
 use super::units::{normalize, KCAL, KJ, VITAMIN_D_IU};
 use super::Row;
 
-/// The API key sent to FoodData Central. A real key is effectively required in
-/// practice; `DEMO_KEY` is the documented public fallback and is rate limited.
-fn api_key() -> String {
-    std::env::var("FOODDATA_API_KEY").unwrap_or_else(|_| "DEMO_KEY".to_string())
-}
-
 /// Parse an SR Legacy food object into a nutrient row.
 ///
 /// Split from the network call so tests can exercise it on a fixture.
@@ -108,7 +102,7 @@ pub fn parse(body: &str) -> Row {
 pub fn get(id: u64) -> Row {
     let url = format!(
         "https://api.nal.usda.gov/fdc/v1/food/{id}?api_key={}",
-        api_key()
+        super::usda::api_key()
     );
     let body = ureq::get(&url)
         .call()

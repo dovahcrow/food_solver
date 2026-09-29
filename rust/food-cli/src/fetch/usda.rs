@@ -16,6 +16,15 @@ use super::nutrients::USDA_NAMES;
 use super::units::{normalize, VITAMIN_D_IU};
 use super::Row;
 
+/// The FoodData Central API key, read from `USDA_API_KEY`.
+///
+/// One key serves every FoodData Central endpoint, so both this module and the
+/// SR Legacy getter use this helper. A real key is effectively required in
+/// practice; `DEMO_KEY` is the documented public fallback and is rate limited.
+pub fn api_key() -> String {
+    std::env::var("USDA_API_KEY").unwrap_or_else(|_| "DEMO_KEY".to_string())
+}
+
 /// Map a USDA display name onto a solver key.
 ///
 /// `Some(None)` is a name the Python table deliberately drops; `None` is a name

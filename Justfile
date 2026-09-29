@@ -1,3 +1,6 @@
+# export HTTPS_PROXY:="http://127.0.0.1:6152"
+export USDA_API_KEY:="Sb1Cy9W8buemWhJcD012yVVFnwNffiyudPOwI6rw"
+
 # Python reference frontends (kept for cross-checking the Rust solver).
 opt +ARGS="":
   uv run python -m src opt {{ARGS}}
