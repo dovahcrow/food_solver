@@ -2,9 +2,12 @@
 //!
 //! SR Legacy is the older, much richer USDA dataset: the same FoodData Central
 //! API serves it, but its records carry the full amino-acid and fatty-acid
-//! panels that the Foundation records behind `portal-data/external` omit. It is
-//! the third source, used to fill the gaps the first two leave (amino acids,
-//! named fatty acids, pantothenic acid, choline, vitamin K, B12).
+//! panels that the Foundation records behind `portal-data/external` omit. That
+//! extra depth (amino acids, named fatty acids, pantothenic acid, choline,
+//! vitamin K, B12) is why `CHOOSE` points many foods at their SR Legacy row.
+//!
+//! Rows are never merged: a food's row comes from exactly one source, and one
+//! file is written per food per source.
 //!
 //! Response shape: `{"description": …, "foodNutrients": [{"nutrient": {"name",
 //! "unitName"}, "amount": …}]}`. Amounts are per 100 g, so they are divided by

@@ -5,22 +5,30 @@
 //! hardcodes them, so this tool only records their existence and never fetches
 //! them.
 
-/// Where a food's nutrient row comes from.
+/// One place a food's nutrient row can be fetched from.
+///
+/// A source is a *sample* of the food, not a piece of one: sources are never
+/// merged, and `CHOOSE` in `food-core` names the single source the solver
+/// reads. A food may have several sources available (`BEEF` exists in both
+/// USDA portal and SR Legacy), and any of them can be the default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
     /// USDA FoodData Central portal view, by its food id.
     Usda(u64),
     /// China Food Composition Tables, by its food id.
     Chinanutri(u64),
+    /// USDA SR Legacy, by its fdcId.
+    SrLegacy(u64),
     /// Defined inline in `food-core`'s `build.rs`; nothing to fetch.
     Inline,
 }
 
-/// One catalog row: the canonical food name and where it is fetched from.
+/// One catalog row: the canonical food name and the source fetched by default.
 #[derive(Debug, Clone, Copy)]
 pub struct Entry {
     pub name: &'static str,
-    pub source: Source,
+    /// The source `food fetch` writes without an explicit choice.
+    pub default_source: Source,
     /// USDA only: divide the cooked-food values to approximate the raw food,
     /// matching `convert_cooked_chicken_breast_to_uncoocked`.
     pub cooked_to_raw: bool,
@@ -30,320 +38,324 @@ pub struct Entry {
 pub const CATALOG: &[Entry] = &[
     Entry {
         name: "BALANCEIT",
-        source: Source::Inline,
+        default_source: Source::Inline,
         cooked_to_raw: false,
     },
     Entry {
         name: "BAICAI",
-        source: Source::Chinanutri(450),
+        default_source: Source::Chinanutri(450),
         cooked_to_raw: false,
     },
     Entry {
         name: "JUANXINCAI",
-        source: Source::Chinanutri(463),
+        default_source: Source::Chinanutri(463),
         cooked_to_raw: false,
     },
     Entry {
         name: "BANANA",
-        source: Source::Usda(1105314),
+        default_source: Source::Usda(1105314),
         cooked_to_raw: false,
     },
     Entry {
         name: "BARF",
-        source: Source::Inline,
+        default_source: Source::Inline,
         cooked_to_raw: false,
     },
     Entry {
         name: "BROCCOLI",
-        source: Source::Usda(747447),
+        default_source: Source::Usda(747447),
         cooked_to_raw: false,
     },
     Entry {
         name: "BEEF",
-        source: Source::Usda(2646173),
+        default_source: Source::Usda(2646173),
         cooked_to_raw: false,
     },
     Entry {
         name: "BEEF_LIVER",
-        source: Source::Chinanutri(836),
+        default_source: Source::Chinanutri(836),
         cooked_to_raw: false,
     },
     Entry {
         name: "BEEN_SPROUT",
-        source: Source::Chinanutri(400),
+        default_source: Source::Chinanutri(400),
         cooked_to_raw: false,
     },
     Entry {
         name: "BELL_PEPER",
-        source: Source::Usda(2258590),
+        default_source: Source::Usda(2258590),
         cooked_to_raw: false,
     },
     Entry {
         name: "BOCAI",
-        source: Source::Chinanutri(473),
+        default_source: Source::Chinanutri(473),
         cooked_to_raw: false,
     },
     Entry {
         name: "BOKCHOY",
-        source: Source::Usda(2685572),
+        default_source: Source::Usda(2685572),
         cooked_to_raw: false,
     },
     Entry {
         name: "BONE_MEAL",
-        source: Source::Inline,
+        default_source: Source::Inline,
         cooked_to_raw: false,
     },
     Entry {
         name: "CANOLA_OIL",
-        source: Source::Chinanutri(1495),
+        default_source: Source::Chinanutri(1495),
         cooked_to_raw: false,
     },
     Entry {
         name: "CABBAGE",
-        source: Source::Usda(2346407),
+        default_source: Source::Usda(2346407),
         cooked_to_raw: false,
     },
     Entry {
         name: "CARROT",
-        source: Source::Usda(2258586),
+        default_source: Source::Usda(2258586),
         cooked_to_raw: false,
     },
     Entry {
         name: "CELERY",
-        source: Source::Usda(2346405),
+        default_source: Source::Usda(2346405),
         cooked_to_raw: false,
     },
     Entry {
         name: "CHICKEN_BREAST",
-        source: Source::Usda(331960),
+        default_source: Source::Usda(331960),
         cooked_to_raw: true,
     },
     Entry {
         name: "CHICKEN_HEART",
-        source: Source::Chinanutri(885),
+        default_source: Source::Chinanutri(885),
         cooked_to_raw: false,
     },
     Entry {
         name: "CHICKEN_LIVER",
-        source: Source::Chinanutri(884),
+        default_source: Source::Chinanutri(884),
         cooked_to_raw: false,
     },
     Entry {
         name: "CHICKEN_GIZZARD",
-        source: Source::Chinanutri(887),
+        default_source: Source::Chinanutri(887),
         cooked_to_raw: false,
     },
     Entry {
         name: "CHICKEN_THIGH",
-        source: Source::Usda(2646171),
+        default_source: Source::Usda(2646171),
         cooked_to_raw: false,
     },
     Entry {
         name: "CHINESE_LETTUS",
-        source: Source::Chinanutri(482),
+        default_source: Source::Chinanutri(482),
         cooked_to_raw: false,
     },
     Entry {
         name: "CUCUMBER",
-        source: Source::Usda(2346406),
+        default_source: Source::Usda(2346406),
         cooked_to_raw: false,
     },
     Entry {
         name: "DUCK_GIZZARD",
-        source: Source::Chinanutri(900),
+        default_source: Source::Chinanutri(900),
         cooked_to_raw: false,
     },
     Entry {
         name: "EGG_SHELL_POWDER",
-        source: Source::Inline,
+        default_source: Source::Inline,
         cooked_to_raw: false,
     },
     Entry {
         name: "EGG",
-        source: Source::Usda(748967),
+        default_source: Source::Usda(748967),
+        cooked_to_raw: false,
+    },
+    Entry {
+        name: "EGG_YOLK",
+        default_source: Source::SrLegacy(172184),
         cooked_to_raw: false,
     },
     Entry {
         name: "EGGPLANT",
-        source: Source::Usda(2685577),
+        default_source: Source::Usda(2685577),
         cooked_to_raw: false,
     },
     Entry {
         name: "FUGUA",
-        source: Source::Chinanutri(421),
+        default_source: Source::Chinanutri(421),
         cooked_to_raw: false,
     },
     Entry {
         name: "JIANGDOU",
-        source: Source::Chinanutri(398),
+        default_source: Source::Chinanutri(398),
         cooked_to_raw: false,
     },
     Entry {
         name: "JIEGUA",
-        source: Source::Chinanutri(423),
+        default_source: Source::Chinanutri(423),
         cooked_to_raw: false,
     },
     Entry {
         name: "KONGXINCAI",
-        source: Source::Chinanutri(493),
+        default_source: Source::Chinanutri(493),
         cooked_to_raw: false,
     },
     Entry {
         name: "CHAYOTE",
-        source: Source::Chinanutri(420),
+        default_source: Source::Chinanutri(420),
         cooked_to_raw: false,
     },
     Entry {
         name: "LUOBO",
-        source: Source::Chinanutri(371),
+        default_source: Source::Chinanutri(371),
         cooked_to_raw: false,
     },
     Entry {
         name: "OYSTER",
-        source: Source::Chinanutri(1112),
+        default_source: Source::Chinanutri(1112),
         cooked_to_raw: false,
     },
     Entry {
         name: "PUMPKIN",
-        source: Source::Chinanutri(426),
+        default_source: Source::Chinanutri(426),
         cooked_to_raw: false,
     },
     Entry {
         name: "PORK",
-        source: Source::Chinanutri(788),
+        default_source: Source::Chinanutri(788),
         cooked_to_raw: false,
     },
     Entry {
         name: "PORK_FAT",
-        source: Source::Chinanutri(780),
+        default_source: Source::Chinanutri(780),
         cooked_to_raw: false,
     },
     Entry {
         name: "PORK_INTESTINE",
-        source: Source::Chinanutri(790),
+        default_source: Source::Chinanutri(790),
         cooked_to_raw: false,
     },
     Entry {
         name: "PORK_LIVER",
-        source: Source::Chinanutri(797),
+        default_source: Source::Chinanutri(797),
         cooked_to_raw: false,
     },
     Entry {
         name: "PORK_HEART",
-        source: Source::Chinanutri(802),
+        default_source: Source::Chinanutri(802),
         cooked_to_raw: false,
     },
     Entry {
         name: "PORK_TONGUE",
-        source: Source::Chinanutri(799),
+        default_source: Source::Chinanutri(799),
         cooked_to_raw: false,
     },
     Entry {
         name: "POTATO",
-        source: Source::Usda(2346403),
+        default_source: Source::Usda(2346403),
         cooked_to_raw: false,
     },
     Entry {
         name: "RICE",
-        source: Source::Usda(2512381),
+        default_source: Source::Usda(2512381),
         cooked_to_raw: false,
     },
     Entry {
         name: "QINCAI",
-        source: Source::Chinanutri(479),
+        default_source: Source::Chinanutri(479),
         cooked_to_raw: false,
     },
     Entry {
         name: "SHANYAO",
-        source: Source::Chinanutri(525),
+        default_source: Source::Chinanutri(525),
         cooked_to_raw: false,
     },
     Entry {
         name: "SALT",
-        source: Source::Inline,
+        default_source: Source::Inline,
         cooked_to_raw: false,
     },
     Entry {
         name: "SIJIDOU",
-        source: Source::Chinanutri(392),
+        default_source: Source::Chinanutri(392),
         cooked_to_raw: false,
     },
     Entry {
         name: "SIGUA",
-        source: Source::Chinanutri(429),
+        default_source: Source::Chinanutri(429),
         cooked_to_raw: false,
     },
     Entry {
         name: "SWEET_POTATO",
-        source: Source::Usda(2346404),
+        default_source: Source::Usda(2346404),
         cooked_to_raw: false,
     },
     Entry {
         name: "SOYBEAN_GREEN",
-        source: Source::Chinanutri(391),
+        default_source: Source::Chinanutri(391),
         cooked_to_raw: false,
     },
     Entry {
         name: "SOY_MILK",
-        source: Source::Usda(1999630),
+        default_source: Source::Usda(1999630),
         cooked_to_raw: false,
     },
     Entry {
         name: "SHITAKE",
-        source: Source::Chinanutri(584),
+        default_source: Source::Chinanutri(584),
         cooked_to_raw: false,
     },
     Entry {
         name: "TOMATO",
-        source: Source::Chinanutri(405),
+        default_source: Source::Chinanutri(405),
         cooked_to_raw: false,
     },
     Entry {
         name: "TOFU_FIRM",
-        source: Source::Chinanutri(334),
+        default_source: Source::Chinanutri(334),
         cooked_to_raw: false,
     },
     Entry {
         name: "TOFU_SOFT",
-        source: Source::Chinanutri(335),
+        default_source: Source::Chinanutri(335),
         cooked_to_raw: false,
     },
     Entry {
         name: "WHITE_MUSHROOM",
-        source: Source::Chinanutri(577),
+        default_source: Source::Chinanutri(577),
         cooked_to_raw: false,
     },
     Entry {
         name: "BASA_FISH",
-        source: Source::Chinanutri(1020),
+        default_source: Source::Chinanutri(1020),
         cooked_to_raw: false,
     },
     Entry {
         name: "WINTER_MELON",
-        source: Source::Chinanutri(419),
+        default_source: Source::Chinanutri(419),
         cooked_to_raw: false,
     },
     Entry {
         name: "ZIGANLAN",
-        source: Source::Chinanutri(463),
+        default_source: Source::Chinanutri(463),
         cooked_to_raw: false,
     },
     Entry {
         name: "ZUCCHINI",
-        source: Source::Usda(2685568),
+        default_source: Source::Usda(2685568),
         cooked_to_raw: false,
     },
 ];
 
 /// SR Legacy records for every food the dataset covers.
 ///
-/// SR Legacy is the same USDA FoodData Central API under a different dataset,
-/// so these sit alongside the primary source rather than replacing it: the
-/// chosen row stays authoritative, and the SR Legacy row is the richer panel
-/// (amino acids, named fatty acids, pantothenic acid, choline, vitamin K, B12)
-/// a caller can pick with `FoodName::source`. Picked to match the primary
-/// record's food as closely as the two datasets allow; where they disagree on
-/// a shared nutrient they are genuinely different samples.
+/// SR Legacy is the same USDA FoodData Central API under a different dataset.
+/// Its rows carry the fuller amino-acid and fatty-acid panel, so `CHOOSE`
+/// points most foods here at their SR Legacy row instead of the default one.
+/// The rows are separate samples of the same food, never merged: the unselected
+/// row stays on disk unused. Picked to match the other sources' food as closely
+/// as the datasets allow.
 pub const SR_LEGACY: &[(&str, u64)] = &[
     ("BAICAI", 169979),
     ("BANANA", 173944),
@@ -409,13 +421,28 @@ pub fn sr_legacy_id(name: &str) -> Option<u64> {
         .map(|(_, id)| *id)
 }
 
+/// Every curated SR Legacy record, whether it is the food's default source or
+/// an alternative one that `CHOOSE` may point at.
+///
+/// A food that only SR Legacy carries names it in [`Source`], so the plain
+/// [`sr_legacy_id`] table lookup would miss it.
+pub fn sr_legacy_records() -> Vec<(&'static str, u64)> {
+    CATALOG
+        .iter()
+        .filter_map(|entry| match entry.default_source {
+            Source::SrLegacy(id) => Some((entry.name, id)),
+            _ => sr_legacy_id(entry.name).map(|id| (entry.name, id)),
+        })
+        .collect()
+}
+
 /// MEXT (Japan) `食品番号` for the foods this table shares with the Japanese
 /// food composition tables.
 ///
 /// MEXT is the only source here that publishes iodine, biotin and pantothenic
-/// acid; the Chinese and USDA rows are still the primary data, and MEXT only
-/// fills the nutrients they leave out. Numbers are `日本食品標準成分表2020年版
-/// （八訂）` 食品番号 values.
+/// acid, so it has the fullest panel for the foods it covers; no food points
+/// `CHOOSE` at it yet. Numbers are `日本食品標準成分表2020年版（八訂）` 食品番号
+/// values.
 pub const MEXT: &[(&str, &str)] = &[
     ("PORK", "11115"),
     ("CHICKEN_BREAST", "11220"),

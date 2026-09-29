@@ -137,21 +137,25 @@ fn cooked_chicken_breast_is_divided_back() {
 
 #[test]
 fn catalog_matches_the_getters() {
-    // 18 USDA foods, 38 chinanutri foods, 5 inline foods. Pinned so an
-    // accidental source change shows up here.
+    // 18 USDA, 38 chinanutri, 1 SR-Legacy-default, 5 inline. These are the
+    // sources `food fetch` writes by default; pinned so drift shows up here.
     let usda = fetch::CATALOG
         .iter()
-        .filter(|entry| matches!(entry.source, fetch::Source::Usda(_)))
+        .filter(|entry| matches!(entry.default_source, fetch::Source::Usda(_)))
         .count();
     let china = fetch::CATALOG
         .iter()
-        .filter(|entry| matches!(entry.source, fetch::Source::Chinanutri(_)))
+        .filter(|entry| matches!(entry.default_source, fetch::Source::Chinanutri(_)))
         .count();
     let inline = fetch::CATALOG
         .iter()
-        .filter(|entry| matches!(entry.source, fetch::Source::Inline))
+        .filter(|entry| matches!(entry.default_source, fetch::Source::Inline))
         .count();
-    assert_eq!((usda, china, inline), (18, 38, 5));
+    let sr_legacy = fetch::CATALOG
+        .iter()
+        .filter(|entry| matches!(entry.default_source, fetch::Source::SrLegacy(_)))
+        .count();
+    assert_eq!((usda, china, sr_legacy, inline), (18, 38, 1, 5));
 }
 
 #[test]
@@ -236,7 +240,7 @@ fn sr_legacy_egg_parses_the_amino_acid_panel() {
     // duplicate alias, so the vitamin cannot be counted twice.
     assert_eq!(get("PANTOTHENIC_ACID"), None);
     assert_per_100g(get("VITAMIN_B5"), 0.00153, "VITAMIN_B5"); // mg per 100 g
-                                                               // Vitamin K has no primary-source row at all, so SR Legacy fills it.
+                                                               // Vitamin K comes from this row alone; no other source has it.
     assert_per_100g(get("VITAMIN_K"), 3e-7, "VITAMIN_K"); // 0.3 µg per 100 g
     assert_per_100g(get("CHOLINE"), 0.294, "CHOLINE"); // mg per 100 g
 
@@ -275,8 +279,8 @@ fn sr_legacy_rice_parses_the_amino_acid_panel() {
 
 #[test]
 fn curated_tables_only_name_catalog_foods() {
-    // Every curated secondary source must point at a food the catalog knows,
-    // and the choose table must name a real source.
+    // Every curated source table must point at a food the catalog knows, and
+    // the choose table must name a real source.
     for (name, id) in fetch::catalog::SR_LEGACY {
         assert!(
             fetch::CATALOG.iter().any(|e| e.name == *name),
@@ -291,6 +295,48 @@ fn curated_tables_only_name_catalog_foods() {
         );
         assert_eq!(number.len(), 5, "{name} has a malformed MEXT number");
     }
+    // An SR Legacy row that is not the default source must stay reachable:
+    // `CHOOSE` points most foods at it, so dropping the fetch would leave the
+    // generated table without the row those foods read.
+    let alternative: Vec<&str> = fetch::CATALOG
+        .iter()
+        .filter(|entry| {
+            !matches!(entry.default_source, fetch::Source::SrLegacy(_))
+                && fetch::catalog::sr_legacy_id(entry.name).is_some()
+        })
+        .map(|entry| entry.name)
+        .collect();
+    assert!(
+        alternative.len() > 20,
+        "expected many foods to have an alternative SR Legacy row, found {}",
+        alternative.len()
+    );
+
+    // SR Legacy can be a food's default source, not only an alternative: a
+    // food that only SR Legacy carries must still be expandable.
+    let primary: Vec<&str> = fetch::CATALOG
+        .iter()
+        .filter(|entry| matches!(entry.default_source, fetch::Source::SrLegacy(_)))
+        .map(|entry| entry.name)
+        .collect();
+    assert!(
+        !primary.is_empty(),
+        "expected at least one SR-Legacy-default food"
+    );
+    let records = fetch::catalog::sr_legacy_records();
+    for name in &primary {
+        assert!(
+            records.iter().any(|(food, _)| food == name),
+            "{name} is SR-Legacy-default but missing from sr_legacy_records"
+        );
+    }
+    // `sr_legacy_records` must not repeat a food.
+    let mut seen: Vec<&str> = records.iter().map(|(name, _)| *name).collect();
+    let total = seen.len();
+    seen.sort_unstable();
+    seen.dedup();
+    assert_eq!(seen.len(), total, "sr_legacy_records repeats a food");
+
     for (name, source) in food_core::foods::CHOOSE {
         assert!(
             fetch::CATALOG.iter().any(|e| e.name == name.name()),

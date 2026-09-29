@@ -178,15 +178,20 @@ impl CmdFetch {
     fn run(&self) {
         if self.list {
             for entry in fetch::CATALOG {
-                let source = match entry.source {
+                let source = match entry.default_source {
                     fetch::Source::Usda(id) => format!("usda {id}"),
                     fetch::Source::Chinanutri(id) => format!("chinanutri {id}"),
+                    fetch::Source::SrLegacy(id) => format!("sr-legacy {id}"),
                     fetch::Source::Inline => "inline".to_string(),
                 };
-                // Secondary sources are reported next to the primary one.
+                // Other available sources are listed next to the default.
                 let mut extras = Vec::new();
-                if let Some(id) = fetch::catalog::sr_legacy_id(entry.name) {
-                    extras.push(format!("sr-legacy {id}"));
+                // A food whose default source is already SR Legacy should not
+                // list the same record twice.
+                if !matches!(entry.default_source, fetch::Source::SrLegacy(_)) {
+                    if let Some(id) = fetch::catalog::sr_legacy_id(entry.name) {
+                        extras.push(format!("sr-legacy {id}"));
+                    }
                 }
                 if let Some(number) = fetch::catalog::mext_number(entry.name) {
                     extras.push(format!("mext {number}"));
@@ -216,7 +221,7 @@ impl CmdFetch {
         if chosen.is_empty() {
             chosen = fetch::CATALOG
                 .iter()
-                .filter(|entry| entry.source != fetch::Source::Inline)
+                .filter(|entry| entry.default_source != fetch::Source::Inline)
                 .collect();
         }
 
@@ -228,11 +233,11 @@ impl CmdFetch {
                 continue;
             }
             eprintln!("[{}/{}] fetching {}", index + 1, total, entry.name);
-            // Every source the food has: the primary row, then any curated
-            // SR Legacy and MEXT records. Each lands in its own file.
-            // Each source lands in its own file; a failure on one is
+            // Every source the food has: the default row, then the curated
+            // SR Legacy and MEXT rows. Each lands in its own file; sources are
+            // alternatives, not parts of one row. A failure on one source is
             // reported and the rest still run.
-            match fetch::fetch_primary(entry, &directory) {
+            match fetch::fetch_default(entry, &directory) {
                 Ok(file) => report_file(&file),
                 Err(error) => eprintln!("    error: {error:#}"),
             }
@@ -300,11 +305,9 @@ impl CmdExpandSrLegacy {
         // The dataset names foods as USDA text, so match each catalog entry to
         // its curated SR Legacy record by description to recover the `{FOOD}`
         // part of the file name.
-        let owned: Vec<(String, u64)> = fetch::CATALOG
-            .iter()
-            .filter_map(|entry| {
-                fetch::catalog::sr_legacy_id(entry.name).map(|id| (entry.name.to_string(), id))
-            })
+        let owned: Vec<(String, u64)> = fetch::catalog::sr_legacy_records()
+            .into_iter()
+            .map(|(name, id)| (name.to_string(), id))
             .collect();
 
         if self.dry_run {

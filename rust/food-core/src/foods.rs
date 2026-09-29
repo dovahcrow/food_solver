@@ -82,6 +82,7 @@ pub const CHOOSE: &[(FoodName, FoodSource)] = &[
     (FoodName::EGG, FoodSource::SrLegacy),
     (FoodName::EGGPLANT, FoodSource::SrLegacy),
     (FoodName::EGG_SHELL_POWDER, FoodSource::Inline),
+    (FoodName::EGG_YOLK, FoodSource::SrLegacy),
     (FoodName::FUGUA, FoodSource::Chinanutri),
     (FoodName::JIANGDOU, FoodSource::Chinanutri),
     (FoodName::JIEGUA, FoodSource::Chinanutri),
@@ -120,7 +121,9 @@ pub const CHOOSE: &[(FoodName, FoodSource)] = &[
 /// The food table keyed by canonical name, holding each food's chosen row.
 ///
 /// Built once from the generated `(food, source, row)` triples: every source is
-/// embedded, and [`CHOOSE`] picks the one that fills the table.
+/// embedded, and [`CHOOSE`] picks the single row the solver reads. Rows are
+/// never merged, so a source with a fuller nutrient panel replaces the others
+/// rather than adding to them.
 pub static FOODS: LazyLock<HashMap<FoodName, Food>> = LazyLock::new(|| {
     ALL.iter()
         .map(|&food| {
@@ -130,31 +133,10 @@ pub static FOODS: LazyLock<HashMap<FoodName, Food>> = LazyLock::new(|| {
                 .find(|(name, tag, _)| *name == food && *tag == source)
                 .map(|(_, _, row)| *row)
                 .expect("every food has a row for its chosen source");
-            (food, patch(food, row))
+            (food, row)
         })
         .collect()
 });
-
-/// A row transform registered in [`PATCH`].
-pub type FoodPatch = fn(Food) -> Food;
-
-/// Fixes applied to a chosen row after it is loaded.
-///
-/// Some sources leave a nutrient out rather than recording a number, and the
-/// report reads that as missing data. A patch replaces the ambiguity for the
-/// fields it covers while keeping the values the source did record, so the
-/// solver's ingredient is unaffected and only the report's completeness
-/// changes. It is currently empty: the inline rows already fill every field
-/// they do not override with a measured zero.
-pub const PATCH: &[(FoodName, FoodPatch)] = &[];
-
-/// Apply the patch registered for `food`, if any.
-fn patch(food: FoodName, row: Food) -> Food {
-    match PATCH.iter().find(|(name, _)| *name == food) {
-        Some((_, apply)) => apply(row),
-        None => row,
-    }
-}
 
 impl FoodName {
     /// The source the solver uses for this food.

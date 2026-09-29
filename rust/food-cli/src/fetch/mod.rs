@@ -59,15 +59,16 @@ pub struct CacheFile {
     pub source: FoodSource,
 }
 
-/// Fetch one food from its primary source into a cache file.
+/// Fetch one food from its default source into a cache file.
 ///
-/// The row is written as `{FOOD}_{Source}.json` with a `choose` property; this
-/// is the only source a plain `food fetch` writes.
+/// The row is written as `{FOOD}_{Source}.json`. Sources are samples of the
+/// same food, never merged, so this is a plain one-file-per-source write.
 #[throws(Error)]
-pub fn fetch_primary(entry: &Entry, directory: &Path) -> CacheFile {
-    let mut row = match entry.source {
+pub fn fetch_default(entry: &Entry, directory: &Path) -> CacheFile {
+    let mut row = match entry.default_source {
         Source::Usda(id) => usda::get(id)?,
         Source::Chinanutri(id) => chinanutri::get(id)?,
+        Source::SrLegacy(id) => sr_legacy::get(id)?,
         Source::Inline => throw!(anyhow!(
             "{} is defined inline and has no remote data",
             entry.name
@@ -84,9 +85,10 @@ pub fn fetch_primary(entry: &Entry, directory: &Path) -> CacheFile {
             .collect();
     }
 
-    let source = match entry.source {
+    let source = match entry.default_source {
         Source::Usda(_) => FoodSource::Usda,
         Source::Chinanutri(_) => FoodSource::Chinanutri,
+        Source::SrLegacy(_) => FoodSource::SrLegacy,
         Source::Inline => FoodSource::Inline,
     };
     write_cache(directory, entry.name, row, source)?
@@ -94,9 +96,17 @@ pub fn fetch_primary(entry: &Entry, directory: &Path) -> CacheFile {
 
 /// Fetch this food's curated SR Legacy record into its own cache file.
 ///
-/// Returns `None` when no SR Legacy record is curated for the food.
+/// This writes the alternative SR Legacy sample, which `CHOOSE` may or may not
+/// read. Most foods have one, so a plain `food fetch` writes several files per
+/// food and the solver picks between them by name.
+///
+/// Returns `None` when no SR Legacy record is curated for the food, or when
+/// SR Legacy is already the default source and [`fetch_default`] wrote it.
 #[throws(Error)]
 pub fn fetch_sr_legacy(entry: &Entry, directory: &Path) -> Option<CacheFile> {
+    if matches!(entry.default_source, Source::SrLegacy(_)) {
+        return None;
+    }
     let Some(id) = catalog::sr_legacy_id(entry.name) else {
         return None;
     };

@@ -143,6 +143,10 @@ just refresh-foods --list                    # 列出食材、可用来源与当
   《中国食物成分表》、USDA SR Legacy 与日本 MEXT 四种来源，各自写进
   `foods/{FOOD}_{Source}.json`；`expand-sr-legacy` 子命令把 SR Legacy 的
   全量 JSON 展开成同样的逐食材文件。
+- **来源之间不做合并**：同一食材的多个来源是同一食物的不同采样版本，各自
+  独立成文件，`CHOOSE` 只选其中**一行**。SR Legacy 的行通常面板最全
+  （氨基酸、脂肪酸、胆碱、维生素 K、B12），所以 28 个食材的 `CHOOSE` 指向
+  它；只被 SR Legacy 收录的食材（如 `EGG_YOLK`）则直接以它为默认来源。
 - 缓存布局：同一种食材每个来源一个文件（如 `BAICAI_Chinanutri.json`、
   `BEEF_SrLegacy.json`），文件体只存营养素，来源由文件名承载。`build.rs`
   把**全部**来源都编进二进制，运行期由 `src/foods.rs` 的 `CHOOSE` 表决定用
