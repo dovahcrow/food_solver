@@ -23,6 +23,7 @@ class Food(Enum):
     BELL_PEPER = auto()
     BOCAI = auto()  # Slightly different from spinach, the root of this one is red.
     BOKCHOY = auto()
+    BONE_MEAL = auto()
     BROCCOLI = auto()
     CABBAGE = auto()
     CANOLA_OIL = auto()
@@ -164,6 +165,19 @@ GETTERS = {
         **{nutrient: 0.0 for nutrient in Nutrient},
         Nutrient.CALCIUM: 0.35 * G,
         Nutrient.MAGNESIUM: 0.014 * G,
+    },
+    # A rendered beef bone meal, taken from a product label's guaranteed
+    # minimums: crude protein >= 26%, crude fat >= 6%, calcium >= 16%,
+    # phosphorus >= 7%. The other nutrients stay a measured zero, so the label
+    # simply does not claim them. Energy is Atwater from the two macros
+    # (0.26*4 + 0.06*9 kcal/g), since a bone meal is not a free-energy food.
+    Food.BONE_MEAL: {
+        **{nutrient: 0.0 for nutrient in Nutrient},
+        Nutrient.PROTEIN: 0.26 * G,
+        Nutrient.FAT: 0.06 * G,
+        Nutrient.CALCIUM: 0.16 * G,
+        Nutrient.PHOSPHORUS: 0.07 * G,
+        Nutrient.ENERGY: 6610.72,
     },
     Food.EGG: usda(748967),
     # Food.EGGPLANT: chinanutri(404),

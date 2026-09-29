@@ -189,6 +189,7 @@ pub const CHOOSE: &[(FoodName, FoodSource)] = &[
     (FoodName::BELL_PEPER, FoodSource::SrLegacy),
     (FoodName::BOCAI, FoodSource::Chinanutri),
     (FoodName::BOKCHOY, FoodSource::SrLegacy),
+    (FoodName::BONE_MEAL, FoodSource::Inline),
     (FoodName::BROCCOLI, FoodSource::SrLegacy),
     (FoodName::CABBAGE, FoodSource::SrLegacy),
     (FoodName::CANOLA_OIL, FoodSource::Chinanutri),

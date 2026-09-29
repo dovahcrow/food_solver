@@ -88,6 +88,21 @@ const INLINE_FOODS: &[(&str, &[(&str, f64)])] = &[
         "EGG_SHELL_POWDER",
         &[("calcium", 0.35), ("magnesium", 0.014)],
     ),
+    // A rendered beef bone meal, taken from a product label's guaranteed
+    // minimums: crude protein >= 26%, crude fat >= 6%, calcium >= 16%,
+    // phosphorus >= 7%. The other nutrients stay a measured zero, so the label
+    // simply does not claim them. Energy is Atwater from the two macros
+    // (0.26*4 + 0.06*9 kcal/g), since a bone meal is not a free-energy food.
+    (
+        "BONE_MEAL",
+        &[
+            ("protein", 0.26),
+            ("fat", 0.06),
+            ("calcium", 0.16),
+            ("phosphorus", 0.07),
+            ("energy", 6610.72),
+        ],
+    ),
     // Salt is sodium chloride. Only the sodium is modelled: the trace minerals
     // the Chinese table also lists for it are not worth a solver variable, and
     // inlining keeps the rest of the row a measured zero instead of missing.

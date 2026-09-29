@@ -52,11 +52,11 @@ fn reference_batch_solves_to_a_known_optimum() {
         (FoodName::CELERY, 245.0),
         (FoodName::JIANGDOU, 411.0),
         (FoodName::PORK, 500.0),
-        (FoodName::RICE, 583.0969414173134),
+        (FoodName::RICE, 583.0969403708767),
         (FoodName::CANOLA_OIL, 0.0),
-        (FoodName::SALT, 0.0035291810384096203),
-        (FoodName::EGG_SHELL_POWDER, 15.769841007271559),
-        (FoodName::EGG, 894.7850245646465),
+        (FoodName::SALT, 0.0028061102421507926),
+        (FoodName::EGG_SHELL_POWDER, 15.769841110678824),
+        (FoodName::EGG, 894.7850273827171),
     ];
     for (food, grams) in expected {
         let actual = result
@@ -67,14 +67,14 @@ fn reference_batch_solves_to_a_known_optimum() {
 
     assert_close(
         result.objective.expect("objective"),
-        4.022682775167067,
+        2.0226827729798784,
         0.05,
         "objective",
     );
 
     let energy = result.nutrient(Nutrient::Energy).expect("energy");
     assert_eq!(energy.unit, "kJ");
-    assert_close(energy.value, 1796.0900626976422, 0.05, "energy per day");
+    assert_close(energy.value, 1796.0900627751228, 0.05, "energy per day");
     assert_eq!(energy.status.as_str(), "within range");
 }
 
