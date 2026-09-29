@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use food_core::{
     plan, scale, FoodName, IngredientSpec, NeedRequired, NeedSoftness, PlanRequest, PlanResult,
-    Profile, FOOD_NAMES, MAX_DAYS,
+    Profile, BUILD_INFO, FOOD_NAMES, MAX_DAYS,
 };
 use serde_json::{to_string_pretty, Value};
 
@@ -147,6 +147,26 @@ impl FoodSolver {
         }
         render(solve_recipe_payload(&request))
     }
+
+    /// Report which build this server came from.
+    #[tool(
+        name = "build_info",
+        description = "Report the build date and git revision of this food-solver \
+                       build, so a result can be traced back to a revision."
+    )]
+    pub fn build_info(&self) -> Result<String, String> {
+        render(build_info_payload())
+    }
+}
+
+/// The stamped build provenance as JSON.
+#[throws(Error)]
+fn build_info_payload() -> String {
+    to_json(&serde_json::json!({
+        "build_date": BUILD_INFO.build_date,
+        "git_sha": BUILD_INFO.git_sha,
+        "description": BUILD_INFO.to_string(),
+    }))?
 }
 
 /// Bridge a fallible tool body onto the `Result<_, String>` the tool macro

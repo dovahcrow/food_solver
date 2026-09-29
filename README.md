@@ -128,8 +128,12 @@ just refresh-foods --list                    # 列出食材、可用来源与当
   用量，`0 ~ 上限` 表示可选。数量都是**整批克数**，`days` 只缩放需求。
 - `rust/food-cli/`：`food` 命令。
 - `rust/food-mcp/`：`food-mcp`，把同一流程暴露成 `list_foods`、`get_needs`、
-  `solve_recipe` 三个 MCP 工具。`solve_recipe` 与 `get_needs` 的 `weight`、
-  `days`、`age` 是必填项（没有默认值），犬只档案未知时应先询问用户。
+  `solve_recipe`、`build_info` 四个 MCP 工具。`solve_recipe` 与 `get_needs` 的
+  `weight`、`days`、`age` 是必填项（没有默认值），犬只档案未知时应先询问用户。
+- 构建信息：`food-core` 的 `build.rs` 把构建时刻（ISO 8601 UTC）与 git 短
+  修订号编进二进制，导出为 `food_core::BUILD_INFO`。CLI 的每个子命令都在
+  输出开头打印这一行，MCP 的 `build_info` 工具返回同样的内容，便于把一份
+  配方或日志对应回具体版本。`SOURCE_DATE_EPOCH` 可覆盖时间以支持可复现构建。
 - `rust/food-cli/` 的 `fetch` 子命令（`food fetch`）：抓取 USDA portal、
   《中国食物成分表》、USDA SR Legacy 与日本 MEXT 四种来源，各自写进
   `foods/{FOOD}_{Source}.json`；`expand-sr-legacy` 子命令把 SR Legacy 的

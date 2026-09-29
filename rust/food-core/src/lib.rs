@@ -8,6 +8,7 @@
 //! requirements and the report basis; it never scales fixed ingredient
 //! weights, because a batch weight is a batch weight.
 
+pub mod build_info;
 pub mod foods;
 pub mod needs;
 pub mod nutrient;
@@ -15,6 +16,7 @@ pub mod planner;
 pub mod recipe;
 pub mod units;
 
+pub use build_info::{BuildInfo, BUILD_INFO};
 pub use foods::{Food, FoodName, FoodSource, ALL as FOOD_NAMES, FOODS};
 pub use needs::{scale, Profile};
 pub use nutrient::{nutrient_value, Nutrient};

@@ -32,6 +32,8 @@ solved recipe and a per-day nutrient report for adult dogs.
   `minimize_usage: true` prefers less of that ingredient among equally good
   recipes.
 - Use `get_needs` to show the raw requirement table for a profile.
+- Use `build_info` when a result needs to be tied to a specific build: it
+  returns the build date and git revision the server was compiled from.
 
 ## Ground rules
 

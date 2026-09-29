@@ -20,6 +20,7 @@ use clap::{ArgAction, Parser, Subcommand};
 use culpa::{throw, throws};
 use food_core::{
     plan, report, FoodName, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus,
+    BUILD_INFO,
 };
 
 /// ANSI colours used by the report.
@@ -161,6 +162,9 @@ struct CmdFetch {
 
 #[throws(Error)]
 fn main_body(cli: Cli) {
+    // Every subcommand announces which build produced its output, so a pasted
+    // report or log can be traced back to a revision.
+    println!("food-solver {BUILD_INFO}");
     match cli.cmd {
         Command::Solve(solve) => solve.run()?,
         Command::Fetch(fetch) => fetch.run()?,
