@@ -137,7 +137,7 @@ fn cooked_chicken_breast_is_divided_back() {
 
 #[test]
 fn catalog_matches_the_python_getters() {
-    // 18 USDA foods, 38 chinanutri foods, 3 inline foods: the same split the
+    // 18 USDA foods, 37 chinanutri foods, 4 inline foods: the same split the
     // Python `GETTERS` table uses. This checks nothing drifted.
     let usda = fetch::CATALOG
         .iter()
@@ -151,7 +151,7 @@ fn catalog_matches_the_python_getters() {
         .iter()
         .filter(|entry| matches!(entry.source, fetch::Source::Inline))
         .count();
-    assert_eq!((usda, china, inline), (18, 38, 3));
+    assert_eq!((usda, china, inline), (18, 37, 4));
 }
 
 #[test]

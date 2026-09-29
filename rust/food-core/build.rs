@@ -6,7 +6,7 @@
 //! which one a run uses is decided at runtime by `CHOOSE` in `src/foods.rs`, so
 //! this script never has to read that table.
 //! The file name supplies the food and its source, so the JSON body is nothing
-//! but nutrients. The three foods that exist only as inline recipes are still
+//! but nutrients. The four foods that exist only as inline recipes are still
 //! hardcoded below. `src/foods.rs` includes the generated file.
 //!
 //! The nutrient field names are derived from `src/nutrient.rs`, so adding a
@@ -88,6 +88,10 @@ const INLINE_FOODS: &[(&str, &[(&str, f64)])] = &[
         "EGG_SHELL_POWDER",
         &[("calcium", 0.35), ("magnesium", 0.014)],
     ),
+    // Salt is sodium chloride. Only the sodium is modelled: the trace minerals
+    // the Chinese table also lists for it are not worth a solver variable, and
+    // inlining keeps the rest of the row a measured zero instead of missing.
+    ("SALT", &[("sodium", 0.39311)]),
 ];
 
 fn main() {

@@ -1,8 +1,8 @@
 //! Which source each food comes from, ported from `GETTERS` in `src/food.py`.
 //!
-//! The three inline foods (`BALANCEIT`, `BARF`, `EGG_SHELL_POWDER`) have no
-//! remote source; `build.rs` in `food-core` hardcodes them, so this tool only
-//! records their existence and never fetches them.
+//! The four inline foods (`BALANCEIT`, `BARF`, `EGG_SHELL_POWDER`, `SALT`) have
+//! no remote source; `build.rs` in `food-core` hardcodes them, so this tool
+//! only records their existence and never fetches them.
 
 /// Where a food's nutrient row comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -249,7 +249,7 @@ pub const CATALOG: &[Entry] = &[
     },
     Entry {
         name: "SALT",
-        source: Source::Chinanutri(1565),
+        source: Source::Inline,
         cooked_to_raw: false,
     },
     Entry {

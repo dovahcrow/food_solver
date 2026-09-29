@@ -186,7 +186,13 @@ GETTERS = {
     Food.RICE: usda(2512381),
     Food.QINCAI: chinanutri(479),
     Food.SHANYAO: chinanutri(525),
-    Food.SALT: chinanutri(1565),
+    # Salt is sodium chloride. Only the sodium is modelled: the trace minerals
+    # the Chinese table also lists for it are not worth a solver variable, and
+    # inlining keeps the rest of the row a measured zero instead of missing.
+    Food.SALT: {
+        **{nutrient: 0.0 for nutrient in Nutrient},
+        Nutrient.SODIUM: 0.39311,
+    },
     # Food.SWEET_POTATO: chinanutri(316),
     Food.SIJIDOU: chinanutri(392),
     Food.SIGUA: chinanutri(429),
