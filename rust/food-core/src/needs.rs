@@ -187,7 +187,7 @@ impl Profile {
             Nutrient::Phosphorus,
             soft(g(1.16, 1.00), Some(4.0 * G * modulation)),
         );
-        needs.insert(Nutrient::Sodium, soft(g(0.29, 0.25), None));
+        needs.insert(Nutrient::Sodium, hard(g(0.29, 0.25), None));
         needs.insert(Nutrient::Potassium, soft(g(1.45, 1.25), None));
         needs.insert(Nutrient::Manganese, soft(mg(1.67, 1.44), None));
         needs.insert(Nutrient::Magnesium, soft(g(0.20, 0.18), None));

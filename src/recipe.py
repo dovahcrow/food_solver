@@ -116,10 +116,23 @@ class RecipeSolver:
 
         self.needs[nut] = (lb, ub, required, hard)
 
-    def effective_upper_bound(self, lb: float, ub: Optional[float]) -> Optional[float]:
-        """Return the explicit upper bound or the configured implicit soft one."""
+    def effective_upper_bound(
+        self,
+        lb: float,
+        ub: Optional[float],
+        hard: NeedSoftness = NeedSoftness.SOFT,
+    ) -> Optional[float]:
+        """Return the bound above which a requirement pays an excess penalty.
+
+        An explicit maximum always applies. The implicit ``multiplier * lb``
+        preference exists to rank soft recipes, so it is only used for a soft
+        requirement; a hard requirement without an explicit maximum is
+        genuinely open-ended and pays nothing for excess.
+        """
         if ub is not None:
             return ub
+        if hard == NeedSoftness.HARD:
+            return None
         if lb > 0 and self.implicit_soft_upper_multiplier is not None:
             return lb * self.implicit_soft_upper_multiplier
         return None
@@ -193,7 +206,7 @@ class RecipeSolver:
                 raise ValueError(f"Invalid maximum for {need.name}")
             H = np.asarray([nutrient_value(self.food_nutrients[f], need)[0] for f in foods])
             supply = H @ x
-            effective_ub = self.effective_upper_bound(lb, ub)
+            effective_ub = self.effective_upper_bound(lb, ub, hard)
             if hard == NeedSoftness.HARD:
                 # Scale each row without changing the feasible set: energy is
                 # in millions of joules while trace nutrients may be micrograms.
@@ -279,8 +292,8 @@ class RecipeSolver:
             if n not in needs:
                 continue
 
-            lb, explicit_ub, required, _ = needs[n]
-            effective_ub = self.effective_upper_bound(lb, explicit_ub)
+            lb, explicit_ub, required, hard = needs[n]
+            effective_ub = self.effective_upper_bound(lb, explicit_ub, hard)
 
             value = 0
             comp = []

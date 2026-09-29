@@ -12,9 +12,11 @@
 //!
 //! Below `L` the shortage is penalised relative to `L`; above `U` the excess
 //! is penalised relative to `U`; inside `[L, U]` the loss is zero. With no
-//! explicit `U`, an open-ended requirement gets a soft preference
+//! explicit `U`, an open-ended *soft* requirement gets a soft preference
 //! `U = multiplier * L`, so protein-like minima do not drift arbitrarily high.
 //! That preference only ranks feasible recipes; it never makes one infeasible.
+//! A hard requirement without an explicit maximum is genuinely open-ended:
+//! the implicit preference is a soft-objective device, so it does not apply.
 //!
 //! [Clarabel]: https://github.com/oxfordcontrol/Clarabel.rs
 
@@ -85,13 +87,21 @@ pub struct Problem {
 }
 
 impl Problem {
-    /// The explicit maximum, or the configured implicit soft one.
-    pub fn effective_upper_bound(&self, minimum: f64, maximum: Option<f64>) -> Option<f64> {
-        if maximum.is_some() {
-            return maximum;
+    /// The bound above which this requirement pays an excess penalty.
+    ///
+    /// An explicit maximum always applies. The implicit `multiplier · L`
+    /// preference exists to rank soft recipes, so it is only used for a soft
+    /// requirement; a hard requirement without an explicit maximum is
+    /// genuinely open-ended and pays nothing for excess.
+    pub fn effective_upper_bound(&self, requirement: &Requirement) -> Option<f64> {
+        if requirement.maximum.is_some() {
+            return requirement.maximum;
+        }
+        if requirement.softness == NeedSoftness::Hard {
+            return None;
         }
         match self.implicit_soft_upper_multiplier {
-            Some(multiplier) if minimum > 0.0 => Some(minimum * multiplier),
+            Some(multiplier) if requirement.minimum > 0.0 => Some(requirement.minimum * multiplier),
             _ => None,
         }
     }
@@ -207,10 +217,12 @@ fn csc_from_rows(nrows: usize, ncols: usize, rows: &[Row]) -> CscMatrix<f64> {
 /// soft_loss_i(y) = max(0, 1 - y/L_i)² + max(0, y/U_i - 1)²
 /// ```
 ///
-/// where `U_i` is the explicit maximum or, for an open-ended minimum, the
-/// implicit preference `multiplier · L_i`. A shortage is measured against
-/// `L_i`, an excess against `U_i`, and the whole interval `[L_i, U_i]` costs
-/// nothing, so the loss is zero at both ends and inside it. The small
+/// where `U_i` is the explicit maximum or, for an open-ended soft minimum, the
+/// implicit preference `multiplier · L_i`. A hard requirement has no implicit
+/// maximum: without an explicit one its excess term is absent entirely, so
+/// `soft_loss_i` is then just the shortage side. A shortage is measured
+/// against `L_i`, an excess against `U_i`, and the whole interval
+/// `[L_i, U_i]` costs nothing, so the loss is zero at both ends and inside it. The small
 /// `0.05 · (x_j / upper_j)²` term does not encode a requirement at all: it only
 /// breaks ties between otherwise equivalent recipes in favour of using less of
 /// a `minimize_usage` ingredient.
@@ -382,8 +394,7 @@ pub fn solve(problem: &Problem) -> Solution {
             .iter()
             .map(|food| value_of(&food.values, *nutrient))
             .collect();
-        let effective_upper =
-            problem.effective_upper_bound(requirement.minimum, requirement.maximum);
+        let effective_upper = problem.effective_upper_bound(requirement);
 
         if requirement.softness == NeedSoftness::Hard {
             // Scale each row without changing the feasible set: energy is in
@@ -423,7 +434,8 @@ pub fn solve(problem: &Problem) -> Solution {
             aux_index += 1;
         }
 
-        // Excess is a soft preference for both SOFT and HARD lower bounds.
+        // Excess is a soft preference. `effective_upper` is `None` for a hard
+        // requirement without an explicit maximum, so no excess term is built.
         if let Some(upper) = effective_upper {
             if upper <= 0.0 {
                 throw!(anyhow!(
@@ -582,8 +594,7 @@ pub fn nutrition_report(
         let Some((_, requirement)) = needs.iter().find(|(n, _)| n == nutrient) else {
             continue;
         };
-        let effective_upper =
-            problem.effective_upper_bound(requirement.minimum, requirement.maximum);
+        let effective_upper = problem.effective_upper_bound(requirement);
 
         let mut total = 0.0;
         let mut components = Vec::new();

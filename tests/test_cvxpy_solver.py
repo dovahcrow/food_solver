@@ -47,23 +47,35 @@ class CvxpySolverTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             RecipeSolver().solve()
 
-    def test_open_ended_need_gets_configurable_soft_upper(self):
-        # Fixed supply is 20 mg. With L=10 mg and default U=1.5*L=15 mg,
-        # relative excess is 1/3 and its squared penalty is 1/9.
+    def test_soft_open_ended_need_gets_configurable_soft_upper(self):
+        # A SOFT need may use the implicit preference. Fixed supply is 20 mg;
+        # with L=10 mg and default U=1.5*L=15 mg, relative excess is 1/3 and
+        # its squared penalty is 1/9.
         p = self.recipe()
         p.food_limits[Food.RICE] = (20., 20.)
         p.add_need(Nutrient.ZINC, .01, None,
-                   NeedRequired.REQUIRED, NeedSoftness.HARD)
+                   NeedRequired.REQUIRED, NeedSoftness.SOFT)
         self.assertTrue(p.solve())
         self.assertAlmostEqual(p.problem.value, 1 / 9, delta=1e-6)
 
-        # None restores the old, genuinely open-ended behavior.
+        # None restores the genuinely open-ended behavior.
         p = RecipeSolver(implicit_soft_upper_multiplier=None)
         p.food_limits = {Food.RICE: (20., 20.)}
         p.food_nutrients = {
             Food.RICE: defaultdict(float, {Nutrient.ZINC: .001})
         }
         p.food_minimize_usage = {Food.RICE: False}
+        p.add_need(Nutrient.ZINC, .01, None,
+                   NeedRequired.REQUIRED, NeedSoftness.SOFT)
+        self.assertTrue(p.solve())
+        self.assertEqual(p.problem.value, 0.)
+
+    def test_hard_open_ended_need_gets_no_implicit_soft_upper(self):
+        # A HARD need without an explicit maximum is genuinely open-ended: the
+        # implicit preference only ranks soft recipes, so it must not apply.
+        # Supply is 20 mg against L=10 mg, yet the excess costs nothing.
+        p = self.recipe()
+        p.food_limits[Food.RICE] = (20., 20.)
         p.add_need(Nutrient.ZINC, .01, None,
                    NeedRequired.REQUIRED, NeedSoftness.HARD)
         self.assertTrue(p.solve())
