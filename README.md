@@ -27,15 +27,10 @@
 
 成年犬命令另外启用钙磷质量比的硬约束 `1 <= Ca/P <= 2`，即
 `Ca >= P` 和 `Ca <= 2P`；钙和磷各自的绝对需求仍单独约束。
-直接使用 `RecipeSolver` 时需显式调用：
-
-```python
-solver.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1., 2.)
-```
-
-比例不随批次天数缩放。此接口添加 `(P-Ca) @ x <= 0` 和
+比例不随批次天数缩放。它实现为 `(P-Ca) @ x <= 0` 和
 `(Ca-2*P) @ x <= 0` 两行线性约束（这里 Ca、P 是食材营养密度行，
-不是二次目标矩阵）。磷的正下限保证分母非零。
+不是二次目标矩阵）；磷的正下限保证分母非零。该约束由 `PlanRequest`
+固定附带，不需要调用方显式添加。
 
 ## 目标函数
 
@@ -52,36 +47,28 @@ solver.add_nutrient_ratio(Nutrient.CALCIUM, Nutrient.PHOSPHORUS, 1., 2.)
 零下限省略不足项；上限必须为有限正数且不小于下限。
 硬约束和钙磷比保持不变。
 
-当需求只有正下限、上限为 `None` 时，`RecipeSolver` 默认增加一个隐式软上限：
-`U = 1.5 * L`。超过 U 后按 `max(0, 供给/U - 1)^2` 惩罚，包括蛋白质这类
-硬下限需求；它只影响可行方案之间的选择，不会造成无解。倍数可配置：
-
-```python
-RecipeSolver(implicit_soft_upper_multiplier=1.2)   # 更接近最低量
-RecipeSolver(implicit_soft_upper_multiplier=2.0)   # 更宽松
-RecipeSolver(implicit_soft_upper_multiplier=None)  # 关闭隐式软上限
-```
+当软需求只有正下限、上限为 `None` 时，默认增加一个隐式软上限
+`U = 1.5 * L`。超过 U 后按 `max(0, 供给/U - 1)^2` 惩罚；它只影响可行方案
+之间的选择，不会造成无解。倍数由 `PlanRequest::implicit_soft_upper_multiplier`
+配置：调小更贴近最低量，调大更宽松，设为 `None` 则关闭。**硬需求不生成隐式
+上限**：没有显式上限的硬需求是真正开放式的，不会因超量被惩罚。
 
 显式上限始终优先。最低量为 0 时不会自动生成上限。这个倍数是配方偏好，
 不是 FEDIAF 的安全上限，也不能据此判断某营养素超过后是否有毒性。
 
-营养报告显示实际参与优化的区间，包括隐式软上限，并注明其倍数。颜色为：
-红色表示低于最低值，黄色表示高于显式或隐式上限，绿色表示位于区间内；
-NOT_REQUIRED 项使用较弱的灰色/黄色提示。黄色超量不等于毒性或硬约束失败。
+营养报告显示实际参与优化的区间。颜色只由状态决定：红色表示低于最低值，
+黄色表示高于显式上限，浅绿色表示位于区间内；NOT_REQUIRED 项额外加删除线。
+隐式软上限只是偏好，超过它不会显示为 `above maximum`，其上限值以下划线标出。
+黄色超量不等于毒性或硬约束失败。
 `--detail true` 的食材分项、营养总量和范围都按每天显示，即使求解的是多日批次。
-实现使用 CVXPY 的 `cp.Variable`、`H @ x`、`cp.square(cp.pos(...))`
-直接表达这些公式。CVXPY 自动生成辅助变量并交给 CLARABEL 求解，
-无需手工拼接 P/q/G/h；`x.value` 只包含食材克数。
-`recipe.py` 中保留了标准二次规划的推导注释。
+实现把这些公式手工转成 Clarabel 的标准形 `minimize (1/2) z'Pz + q'z`，
+`A z <= b`：每个软损失的一侧各一个辅助变量，其平方进 `P` 的对角线，
+约束仍为线性行。推导细节见 `rust/food-core/src/recipe.rs` 的模块文档。
 
-依赖为 CVXPY 1.9.2+，具体版本由 `uv.lock` 固定，不再依赖 CVXOPT。
-`solver.problem.status` 和 `.value` 提供原生结果；保留 `sol['x']`、
-`sol['status']`、`sol['primal objective']` 兼容接口。
-只有 `OPTIMAL` 返回成功，不可行时返回 False；无成功结果时 `amount()`
-报错，防止取到旧配方。底层求解器异常会正常抛出。
+`Solution` 只在最优时给出 `grams`；不可行或不收敛时为 `None`，不会返回旧配方。
+失败状态通过 `SolveStatus` 原样带出。求解器异常会正常抛出。
 
-官方文档：[CVXPY 建模规则](https://www.cvxpy.org/tutorial/dcp/index.html)、
-[求解器接口](https://www.cvxpy.org/tutorial/solvers/index.html)。
+Clarabel 文档：<https://github.com/oxfordcontrol/Clarabel.rs>。
 
 启用 `minimize_usage` 时增加 `0.05 * (食材克数 / 食材上限)^2`，避免原来的
 克数平方惩罚随批量大小放大。库存和需求一起乘 10 时，目标函数保持一致。
@@ -89,17 +76,17 @@ NOT_REQUIRED 项使用较弱的灰色/黄色提示。黄色超量不等于毒性
 ## 使用与验证
 
 ```sh
-uv sync
-.venv/bin/python -m src opt -d 10
-.venv/bin/python -m unittest discover -s tests -v
+just build
+just test
+just run solve -d 10 -i PORK:500 -i RICE:700
 ```
 
-需要指定已确认的每日热量时可使用 `--daily-kcal`，例如命令形式为
-`opt -d 10 --daily-kcal 500`；这个示例数值不是个体喂养建议。
+需要指定已确认的每日热量时可使用 `--daily-kcal`，例如 `solve -d 10
+--daily-kcal 500`；这个示例数值不是个体喂养建议。
 
-每日需求指全天总量，尚未扣除商品粮贡献。当前命令中的 `foods_hard`
-仍表示必须全部用完的批次重量，不会随 `day` 自动缩放。当前固定食材在
-新的默认需求下可能无解；不要仅为得到解而提高热量。
+每日需求指全天总量，尚未扣除商品粮贡献。不带后缀的 `-i FOOD:GRAMS` 是上限，
+求解器可以少用；要固定用量需显式写 `:fixed`。给定食材在新的默认需求下可能
+无解；不要仅为得到解而提高热量。
 
 ## 新增营养目标与数据覆盖
 
@@ -118,13 +105,12 @@ uv sync
 所有行都参与优化，也不等于食物数据完整。新增的最低需求使用单边平方
 缺口损失，不惩罚超过最低量；其他偏好仍可与这些软需求权衡。
 
-旧 JSON 缓存不会自动多出以前被丢弃的氨基酸/脂肪酸。可以显式重新获取（Rust 或 Python 前端均可，二者产出的缓存逐字节一致）：
+旧 JSON 缓存不会自动多出以前被丢弃的氨基酸/脂肪酸。可以显式重新获取：
 
 ```sh
-just refresh-foods RICE EGG CHICKEN_BREAST   # Rust 抓取器（food fetch）
+just refresh-foods RICE EGG CHICKEN_BREAST   # 抓取指定食材（food fetch）
 just refresh-foods                           # 全部可抓取食材
 just refresh-foods --list                    # 列出食材、可用来源与当前选择
-just refresh-foods-py RICE EGG               # Python 参考实现
 ```
 
 这个命令会联网并覆盖指定食材缓存；来源本身未提供的字段仍会缺失。
@@ -147,23 +133,20 @@ just refresh-foods-py RICE EGG               # Python 参考实现
 - `rust/food-cli/` 的 `fetch` 子命令（`food fetch`）：抓取 USDA portal、
   《中国食物成分表》、USDA SR Legacy 与日本 MEXT 四种来源，各自写进
   `foods/{FOOD}_{Source}.json`；`expand-sr-legacy` 子命令把 SR Legacy 的
-  全量 JSON 展开成同样的逐食材文件。USDA/中国两条路径移植自 Python 的
-  `food_getters/{usda,chinanutri}.py`，产出与 Python 逐字节相同。
+  全量 JSON 展开成同样的逐食材文件。
 - 缓存布局：同一种食材每个来源一个文件（如 `BAICAI_Chinanutri.json`、
   `BEEF_SrLegacy.json`），文件体只存营养素，来源由文件名承载。`build.rs`
   把**全部**来源都编进二进制，运行期由 `src/foods.rs` 的 `CHOOSE` 表决定用
   哪一份——CLI 和 MCP 传入的始终只是食材名，名字 + 来源在内部合成后再查表。
   换来源只改 `CHOOSE` 一行并重建，不必重新抓取。
-- `rust/food-core/build.rs`：构建时读取 `foods/{FOOD}_{Source}.json`（外加 Python 源码里
-  三条内联配方）生成内嵌食材营养表，`src/foods.rs` 再用 `include!` 引进来。
+- `rust/food-core/build.rs`：构建时读取 `foods/{FOOD}_{Source}.json`（外加
+  `build.rs` 里几条内联配方）生成内嵌食材营养表，`foods.rs` 再用 `include!`
+  引进来。
 
 求解器用 [Clarabel](https://github.com/oxfordcontrol/Clarabel.rs)（牛津大学，
-CVXPY 的默认求解器），不是 `cvxrust`（只有 0.1.0，不成熟）。目标函数与
-Python 版完全一致：只有下限的软需求用 `max(0, (L - y) / L)^2`，有上下限的
-用两侧相对平方损失，另加 `U = 1.5L` 的隐式软上限；硬约束与钙磷比不变。
-Rust 版原本与 Python 输出数值一致；缓存改为按来源取行后，被 `CHOOSE`
-切到 SR Legacy 的 18 个食材数值已变化，参考测试因此记录的是当前基线
-（见 `rust/food-core/tests/reference.rs`）。
+CVXPY 也用它）。目标函数：只有下限的软需求用 `max(0, (L - y) / L)^2`，有上下
+限的用两侧相对平方损失，另加 `U = 1.5L` 的隐式软上限；硬需求与钙磷比是硬约束。
+参考基线记录在 `rust/food-core/tests/reference.rs`，语义或 `CHOOSE` 变化时需重录。
 
 ```sh
 just build          # cargo build --release
@@ -180,19 +163,20 @@ GRAMS 是上限（求解器可少用），要固定用量需显式 `:fixed`。
 按**给定用量**（不求解）直接输出同一套营养报告，用来看某批配方实际提供了多少
 营养。`food fetch --list` 列出全部食材，`food fetch` 刷新食材缓存。
 
-Python 参考实现（`just opt`）同样要求至少一个 `-i`，后缀语义一致。
+## 数据来源
 
-## Python 参考实现
+食材数据有两个入口：
 
-`src/` 仍保留为 Python 参考实现，主要用来和 Rust 结果对照：`just opt -d 10`
-运行它，`just refresh-foods-py` 走它的食材抓取（仅 USDA/中国两条来源）。
-数据抓取已由 Rust 的 `food fetch` 覆盖（`just refresh-foods`），因此更新
-食材数据不再依赖 Python。MCP 支持只保留在 Rust 的 `food-mcp`，Python 侧的
-`mcp_server` 已不存在，对应的 Python 测试也已移除。
-食材 JSON 更新后重新构建即可（`build.rs` 会自动重新生成内嵌表）。
-SR Legacy 的氨基酸/脂肪酸面板比 portal 视图全，`CHOOSE` 里已把 18 个食材
-切到 `SrLegacy`（因此这些食材的求解数值与旧 Python 结果不再一致）；MEXT
-是唯一提供碘、生物素、泛酸的来源，抓取脚本已接好，`MEXT` 表填好编号即可用。
+- `just refresh-foods`（`food fetch`）按 `foods/{FOOD}_{Source}.json` 逐食材抓取
+  USDA portal、《中国食物成分表》、USDA SR Legacy 与日本 MEXT 四种来源；
+  `food fetch --list` 列出全部食材及其可用来源。
+- `just run expand-sr-legacy --json <全量 JSON>` 把 SR Legacy 的批量 JSON
+  展开成同样的逐食材文件。
+
+同一种食材每个来源一个文件，`build.rs` 把全部来源编进二进制，运行期由
+`rust/food-core/src/foods.rs` 的 `CHOOSE` 表决定用哪一份；换来源只改 `CHOOSE`
+一行并重建，不必重新抓取。`refresh-foods` 需要 USDA 的 `USDA_API_KEY`，
+抓取中国营养网还需要能访问它的网络（可用 `HTTPS_PROXY`）。
 
 ## 作为 Codex 插件使用
 

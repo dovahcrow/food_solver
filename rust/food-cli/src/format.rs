@@ -4,7 +4,7 @@
 //! 500 g staple and a 1.2 g additive are both readable without a long tail of
 //! noise digits. Report values still use C's `%g`.
 
-/// Python's `f"{value:g}"`, i.e. C's `%g` with the default precision of 6.
+/// C's `%g` with the default precision of 6.
 ///
 /// Six significant digits, trailing zeros removed, fixed notation while the
 /// decimal exponent stays in `[-4, 6)`, and a two-digit exponent otherwise.
@@ -80,7 +80,7 @@ pub fn weight(value: f64) -> String {
     format!("{value:.decimals$}")
 }
 
-/// The `%.2f`-style fixed rendering the Python frontend used for bounds.
+/// The `%.2f`-style fixed rendering used for bounds.
 pub fn fixed2(value: f64) -> String {
     format!("{value:.2}")
 }

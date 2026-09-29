@@ -1,7 +1,7 @@
 //! Unit conversion for the fetchers.
 //!
 //! Food mass and nutrient mass are grams; energy is joules. `normalize` maps a
-//! source-reported unit onto those units, mirroring the Python getters.
+//! source-reported unit onto those units.
 
 /// Grams.
 pub const G: f64 = 1.0;

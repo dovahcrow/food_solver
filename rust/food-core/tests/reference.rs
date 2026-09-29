@@ -1,6 +1,8 @@
 //! End-to-end solver checks on the reference batch.
 //!
-//! The numbers used to match the Python frontends exactly. They no longer do:
+//! These numbers are the solver's current output for the reference batch,
+//! recorded so a change in semantics or data shows up as a diff. They are not
+//! an external ground truth:
 //! the cache now picks one source per food (`choose` in the file metadata), and
 //! `CELERY`, `RICE` and `EGG` were deliberately moved onto their richer SR
 //! Legacy rows, so the optima shift. The expectations below are the solver's
@@ -79,7 +81,7 @@ fn reference_batch_solves_to_a_known_optimum() {
 }
 
 #[test]
-fn one_day_reference_batch_is_infeasible_like_python() {
+fn one_day_reference_batch_is_infeasible() {
     let result = plan(&reference_request(1)).expect("solve");
     assert!(!result.optimal);
     assert_eq!(result.status, "infeasible");

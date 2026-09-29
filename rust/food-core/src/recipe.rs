@@ -1,6 +1,6 @@
 //! The convex batch solver and its structured nutrition report.
 //!
-//! This mirrors the Python reference formulation: a quadratic program with
+//! The formulation is a quadratic program with
 //! relative-boundary squared losses, solved by [Clarabel] — the same
 //! interior-point solver CVXPY used.
 //!
@@ -272,7 +272,7 @@ fn csc_from_rows(nrows: usize, ncols: usize, rows: &[Row]) -> CscMatrix<f64> {
 /// arguments on the non-negative side, so minimising the square pins the
 /// variable to the smallest value the row allows — which is `max(0, ·)`. That
 /// is why no extra `s_i >= 0` / `t_i >= 0` rows are needed: the squared cost
-/// does that work, and the `Python` reference uses the same trick (`cp.pos`).
+/// does that work.
 /// The food variables and the auxiliaries are therefore all free in Clarabel;
 /// the non-negativity lives in the cone applied to the slack, and the row
 /// `x_j >= lower_j >= 0` re-establishes `x_j >= 0`.
@@ -286,9 +286,7 @@ fn csc_from_rows(nrows: usize, ncols: usize, rows: &[Row]) -> CscMatrix<f64> {
 ///
 /// `P_ss = 2` makes `(1/2) z'Pz` contribute `s²`, i.e. the loss exactly. The
 /// `0.05·(x_j/upper_j)²` preference becomes `P_jj = 0.1/upper_j²`, because
-/// `(1/2)·(0.1/upper_j²)·x² = 0.05·(x/upper_j)²`. (The Python CVXPY reference
-/// assembles `P[j,j] += 0.1/ub²` for the same reason; CVXPY then generates the
-/// distance from the objective it was given, so the two formulations agree.)
+/// `(1/2)·(0.1/upper_j²)·x² = 0.05·(x/upper_j)²`.
 ///
 /// The remaining rows are linear and need no auxiliaries:
 ///
@@ -359,9 +357,8 @@ pub fn solve(problem: &Problem) -> Solution {
 
     // Ingredient bounds and the stock-fraction preference.
     for (index, food) in foods.iter().enumerate() {
-        // The Python reference declares x non-negative and adds x >= lower, so
-        // an optional ingredient (lower == 0) still needs the x >= 0 row:
-        // Clarabel variables are free unless constrained.
+        // An optional ingredient (lower == 0) still needs an explicit
+        // x >= 0 row: Clarabel variables are free unless constrained.
         let mut lower_row = Row::new();
         lower_row.push(index, -1.0);
         lower_row.bound = -food.lower;

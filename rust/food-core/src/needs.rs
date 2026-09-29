@@ -82,7 +82,7 @@ impl Profile {
         };
 
         // A/D/E, choline and selenium keep their historical NOT_REQUIRED setting:
-        // they are reported but not optimised, matching the Python reference.
+        // they are reported but not optimised.
         let soft_optional = |minimum: f64, maximum: Option<f64>| Requirement {
             minimum,
             maximum,

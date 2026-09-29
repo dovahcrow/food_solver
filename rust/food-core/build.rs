@@ -18,11 +18,10 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Foods that have no JSON cache; the Python source defines them inline.
+/// Foods that have no JSON cache; they are defined inline here.
 ///
-/// Only the nutrients the Python recipe overrides are listed. The Python
-/// expands `**{nutrient: 0.0 for nutrient in Nutrient}` first, so every other
-/// nutrient is a measured zero rather than missing data.
+/// Only the overridden nutrients are listed; every other nutrient is a
+/// measured zero rather than missing data.
 const INLINE_FOODS: &[(&str, &[(&str, f64)])] = &[
     (
         "BALANCEIT",
@@ -290,7 +289,7 @@ fn render(fields: &[String], rows: &BTreeMap<(String, String), BTreeMap<String, 
          /// Every food the solver knows.\n\
          ///\n\
          /// Variants keep the canonical SCREAMING_SNAKE name so they read the\n\
-         /// same as the cache files and the Python enum.\n\
+         /// same as the cache files.\n\
          #[allow(non_camel_case_types)]\n\
          #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]\n\
          pub enum FoodName {\n",

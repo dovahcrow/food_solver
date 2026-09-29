@@ -1,4 +1,4 @@
-//! USDA FoodData Central getter, ported from `src/food_getters/usda.py`.
+//! USDA FoodData Central portal getter.
 //!
 //! `https://fdc.nal.usda.gov/portal-data/external/{id}` returns the food with
 //! its nutrients, each already carrying a value and unit. Values are per 100 g
@@ -27,9 +27,8 @@ pub fn api_key() -> String {
 
 /// Map a USDA display name onto a solver key.
 ///
-/// `Some(None)` is a name the Python table deliberately drops; `None` is a name
-/// the table does not list at all, which the caller records and skips — exactly
-/// what the Python getter does when it prints the name and moves on.
+/// `Some(None)` is a name the table deliberately drops; `None` is a name the
+/// table does not list at all, which the caller records and skips.
 fn map_name(name: &str) -> Option<Option<&'static str>> {
     if let Some((_, value)) = USDA_NAMES.iter().find(|(key, _)| *key == name) {
         return Some(*value);

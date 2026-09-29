@@ -5,7 +5,7 @@
 //!
 //! `food solve -d 10 -i RICE:500` solves a batch; `food report -i RICE:500`
 //! scores an exact batch without solving; `food fetch` refreshes the
-//! `foods/*.json` caches the table is built from, ported from the Python
+//! `foods/*.json` caches the table is built from.
 //! getters.
 
 mod fetch;
@@ -22,7 +22,7 @@ use food_core::{
     plan, report, FoodName, IngredientSpec, NutrientReport, PlanRequest, Profile, ReportStatus,
 };
 
-/// ANSI colours, matching the Python frontend so output stays comparable.
+/// ANSI colours used by the report.
 mod color {
     pub const RESET: &str = "\x1b[0m";
     pub const RED: &str = "\x1b[31m";
@@ -484,9 +484,8 @@ fn display_status(report: &NutrientReport) -> ReportStatus {
     }
 }
 
-/// One nutrient line, matching the Python frontend's formatting.
+/// One nutrient line of the report.
 fn format_nutrient(report: &NutrientReport, detail: bool) -> String {
-    // Python's "%.2g" style: two significant digits for the raw values.
     let mut text = String::new();
     if detail {
         let parts: Vec<String> = report

@@ -11,11 +11,14 @@ executables, so a macOS build will not run on Linux or vice versa. Rust makes
 this cheap, so package once per platform instead of cross-compiling.
 
 Usage:
-    python scripts/make_plugin.py                    # build + update marketplace
-    python scripts/make_plugin.py --install          # also run `codex plugin add`
-    python scripts/make_plugin.py --skip-build       # reuse target/release
-    python scripts/make_plugin.py --archive out.tar  # also write a tarball
-    python scripts/make_plugin.py --musl --archive dist/food-solver-musl.tar.gz
+    python3 scripts/make_plugin.py                    # build + update marketplace
+    python3 scripts/make_plugin.py --install          # also run `codex plugin add`
+    python3 scripts/make_plugin.py --skip-build       # reuse target/release
+    python3 scripts/make_plugin.py --archive out.tar  # also write a tarball
+    python3 scripts/make_plugin.py --musl --archive dist/food-solver-musl.tar.gz
+
+The solver itself is Rust; this script is a build helper and only needs a
+system Python 3 interpreter (no virtualenv, no project dependencies).
 """
 
 from __future__ import annotations
@@ -111,16 +114,11 @@ def copy_template(destination: Path) -> None:
             target.chmod(0o755)
 
 
-# Everything a previous packaging run may have written. The Python-era
-# scaffold is listed too, so upgrading from it leaves no stale runtime behind.
+# Everything this packaging run writes. Cleared before the template is copied
+# in, so removing a binary or skill cannot leave a stale copy behind.
 GENERATED = (
     "bin",
     "skills",
-    "foods",
-    "foodsolver",
-    "runtime",
-    "scripts",
-    "pyproject.toml",
     ".mcp.json",
     ".codex-plugin/plugin.json",
 )

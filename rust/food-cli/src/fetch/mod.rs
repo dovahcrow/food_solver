@@ -1,14 +1,13 @@
 //! Download the food nutrient caches the solver embeds.
 //!
-//! `build.rs` in `food-core` turns `foods/*.json` into the embedded table, but
-//! those files were only ever produced by the Python frontends. This module
-//! ports all three getters — USDA FoodData Central, the China Food Composition
-//! Tables, and USDA SR Legacy — so the `food fetch` command can refresh the
-//! cache without Python.
+//! `build.rs` in `food-core` turns `foods/*.json` into the embedded table; this
+//! module is what produces those files. It covers every source — USDA FoodData
+//! Central, the China Food Composition Tables, USDA SR Legacy and Japan's MEXT
+//! — so `food fetch` can refresh the cache on its own.
 //!
-//! The files it writes are byte-for-byte compatible with the Python ones:
-//! sorted keys, four-space indent, an `__name__` display name, and values in
-//! the solver's base units (grams per gram of food, joules per gram).
+//! The files it writes use sorted keys, four-space indent, an `__name__` display
+//! name, and values in the solver's base units (grams per gram of food, joules
+//! per gram).
 
 pub mod catalog;
 pub mod chinanutri;
@@ -30,8 +29,8 @@ pub use catalog::{Entry, Source, CATALOG};
 
 /// Matches a China table cell holding exactly `<number><unit>`.
 ///
-/// Mirrors the Python getter's `((\d*\.)?\d+)(g|mg|μg|kJ)$`, so a cell with a
-/// footnote or a dash is skipped rather than misread.
+/// A cell holding exactly `<number><unit>`; a footnote or a dash is skipped
+/// rather than misread.
 pub static AMOUNT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^((\d*\.)?\d+)(g|mg|μg|kJ)$").expect("amount regex"));
 
@@ -44,9 +43,9 @@ pub struct Row {
     /// Keys are `Nutrient` names such as `PROTEIN`; values are grams per gram,
     /// except `ENERGY`, which is joules per gram.
     pub nutrients: Vec<(&'static str, f64)>,
-    /// Display names the source returned that the table does not map. The
-    /// Python getter prints these and carries on; keeping them makes the same
-    /// drift visible without failing the fetch.
+    /// Display names the source returned that the table does not map. They are
+    /// recorded and carried on rather than failing the fetch, so source drift
+    /// stays visible.
     pub skipped: Vec<String>,
 }
 
@@ -70,14 +69,14 @@ pub fn fetch_primary(entry: &Entry, directory: &Path) -> CacheFile {
         Source::Usda(id) => usda::get(id)?,
         Source::Chinanutri(id) => chinanutri::get(id)?,
         Source::Inline => throw!(anyhow!(
-            "{} is defined inline in the Python source and has no remote data",
+            "{} is defined inline and has no remote data",
             entry.name
         )),
     };
 
     if entry.cooked_to_raw {
-        // Same dirty fix as the Python frontend: some nutrients are only
-        // published for the cooked food, so divide back towards the raw one.
+        // Some nutrients are only published for the cooked food, so divide
+        // back towards the raw one.
         row.nutrients = row
             .nutrients
             .into_iter()
@@ -147,20 +146,19 @@ fn write_cache(directory: &Path, food: &str, row: Row, source: FoodSource) -> Ca
     file
 }
 
-/// Render a cache file, including its provenance and `choose` flag.
+/// Render a cache file body.
 ///
-/// The bytes match Python's `json.dump(row, indent=4, sort_keys=True,
-/// ensure_ascii=False)` for the same data: keys sorted, four-space indent,
+/// The format is stable and diff-friendly: keys sorted, four-space indent,
 /// `__name__` last (its underscore sorts after every uppercase key), raw UTF-8
-/// for non-ASCII names, and the same shortest-round-trip float literals. The
-/// source lives in the file name, not in the body.
+/// for non-ASCII names, and shortest-round-trip float literals. The source
+/// lives in the file name, not in the body.
 #[throws(Error)]
 pub fn to_cache_json(file: &CacheFile) -> String {
     let mut lines: Vec<String> = file
         .row
         .nutrients
         .iter()
-        .map(|(key, value)| format!("    {}: {}", json_string(key), python_float(*value)))
+        .map(|(key, value)| format!("    {}: {}", json_string(key), short_float(*value)))
         .collect();
     lines.sort();
     lines.push(format!(
@@ -172,7 +170,8 @@ pub fn to_cache_json(file: &CacheFile) -> String {
     format!("{{\n{}\n}}", lines.join(",\n"))
 }
 
-/// Quote a string the way Python's `json.dumps` does with `ensure_ascii=False`.
+/// Quote a string, escaping only the characters JSON requires; non-ASCII
+/// stays raw.
 fn json_string(value: &str) -> String {
     let mut out = String::with_capacity(value.len() + 2);
     out.push('"');
@@ -193,13 +192,12 @@ fn json_string(value: &str) -> String {
     out
 }
 
-/// Format a float the way Python's `repr` does.
+/// Format a float with the shortest round-tripping digits.
 ///
-/// Rust's `{:?}` already gives the shortest round-tripping digits with Python's
-/// fixed/scientific switch points; only the exponent spelling differs, so the
-/// sign and two-digit padding are added here (`4e-5` -> `4e-05`, `1e16` ->
-/// `1e+16`).
-fn python_float(value: f64) -> String {
+/// Rust's `{:?}` already gives those digits; only the exponent spelling
+/// differs, so the sign and two-digit padding are added here (`4e-5` ->
+/// `4e-05`, `1e16` -> `1e+16`).
+fn short_float(value: f64) -> String {
     let text = format!("{value:?}");
     let Some((mantissa, exponent)) = text.split_once('e') else {
         return text;

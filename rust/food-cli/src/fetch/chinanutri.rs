@@ -1,5 +1,4 @@
-//! China Food Composition Tables getter, ported from
-//! `src/food_getters/chinanutri.py`.
+//! China Food Composition Tables getter.
 //!
 //! `https://nlc.chinanutri.cn/fq/foodinfo/{id}.html` renders the food as an
 //! HTML table. The food name is the `h1` inside `div.food_introduce_top`; each

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::foods::Food;
 
-/// Every nutrient the solver understands, mirroring the Python enum's order.
+/// Every nutrient the solver understands, in canonical order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Nutrient {
     Energy,
@@ -70,8 +70,8 @@ pub enum Nutrient {
 }
 
 impl Nutrient {
-    /// Uppercase `SCREAMING_SNAKE_CASE` name, matching the Python enum and the
-    /// keys used in the food data and reports.
+    /// Uppercase `SCREAMING_SNAKE_CASE` name, matching the keys used in the
+    /// food data and reports.
     pub fn name(self) -> &'static str {
         use Nutrient::*;
         match self {
@@ -133,8 +133,7 @@ impl Nutrient {
         }
     }
 
-    /// Every nutrient, in the Python enum's declaration order, which is also
-    /// the order the reports use.
+    /// Every nutrient, in the order the reports use.
     pub fn all() -> &'static [Nutrient] {
         use Nutrient::*;
         &[

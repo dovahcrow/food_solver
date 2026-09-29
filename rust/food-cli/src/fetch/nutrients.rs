@@ -1,9 +1,8 @@
-//! Source-name -> solver-key tables, ported verbatim from the Python
-//! getters in `src/food_getters/{usda,chinanutri}.py`.
+//! Source-name -> solver-key tables for the USDA and China fetchers.
 //!
-//! A `None` key marks a row the Python getter deliberately ignores (a
-//! total, a duplicate vitamin form, or a nutrient the solver does not
-//! model). Keeping those rows explicit preserves the port's parity.
+//! A `None` key marks a row that is deliberately ignored (a total, a duplicate
+//! vitamin form, or a nutrient the solver does not model). Keeping those rows
+//! explicit documents why the source's value is dropped.
 
 /// USDA FoodData Central display name -> `Nutrient` key, or `None`.
 pub const USDA_NAMES: &[(&str, Option<&str>)] = &[

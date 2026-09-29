@@ -5,8 +5,8 @@
 mod format;
 
 #[test]
-fn g_matches_python_percent_g() {
-    // Expected strings come from Python's f"{value:g}".
+fn g_matches_c_percent_g() {
+    // Expected strings come from C's `%g`.
     let cases = [
         (1796.0900634150437, "1796.09"),
         (27.27579378874549, "27.2758"),

@@ -1,8 +1,8 @@
-//! The Rust getters must reproduce the Python `foods/*.json` caches exactly.
+//! The fetchers must reproduce the expected `foods/*.json` bodies exactly.
 //!
 //! `usda_beef.json` is a captured real USDA response; `china_pork.html` is a
 //! trimmed page with the same structure the live China Food Composition Tables
-//! serve. The expected rows are what the Python getters produced for them, so
+//! serve. The expected rows are captured from the real sources, so
 //! the assertions pin byte-level parity rather than approximate agreement.
 //!
 //! The `fetch` module is compiled into the binary, so it is pulled in here by
@@ -30,7 +30,7 @@ fn assert_row(row: &Row, name: &str, expected: &[(&str, f64)]) {
 }
 
 #[test]
-fn usda_beef_matches_the_python_cache() {
+fn usda_beef_matches_the_captured_row() {
     let body = include_str!("fixtures/usda_beef.json");
     let row = fetch::usda::parse(body).expect("parse USDA beef");
     assert_row(
@@ -57,7 +57,7 @@ fn usda_beef_matches_the_python_cache() {
 }
 
 #[test]
-fn china_pork_matches_the_python_cache() {
+fn china_pork_matches_the_captured_row() {
     let body = include_str!("fixtures/china_pork.html");
     let row = fetch::chinanutri::parse(body).expect("parse China pork");
     assert_row(
@@ -86,7 +86,7 @@ fn china_pork_matches_the_python_cache() {
 }
 
 #[test]
-fn cache_json_round_trips_like_python() {
+fn cache_json_round_trips() {
     let body = include_str!("fixtures/usda_beef.json");
     let row = fetch::usda::parse(body).expect("parse USDA beef");
     let file = CacheFile {
@@ -94,7 +94,7 @@ fn cache_json_round_trips_like_python() {
         source: FoodSource::Usda,
     };
     let text = to_cache_json(&file).expect("render cache json");
-    // Same shape the Python `json.dump(..., indent=4, sort_keys=True)` writes:
+    // The cache shape: sorted keys, four-space indent, `__name__` last.
     // the display name is a `__name__` key, and keys are sorted.
     let parsed: serde_json::Value = serde_json::from_str(&text).expect("valid json");
     assert_eq!(
@@ -136,9 +136,9 @@ fn cooked_chicken_breast_is_divided_back() {
 }
 
 #[test]
-fn catalog_matches_the_python_getters() {
-    // 18 USDA foods, 38 chinanutri foods, 5 inline foods: the same split the
-    // Python `GETTERS` table uses. This checks nothing drifted.
+fn catalog_matches_the_getters() {
+    // 18 USDA foods, 38 chinanutri foods, 5 inline foods. Pinned so an
+    // accidental source change shows up here.
     let usda = fetch::CATALOG
         .iter()
         .filter(|entry| matches!(entry.source, fetch::Source::Usda(_)))
@@ -156,7 +156,7 @@ fn catalog_matches_the_python_getters() {
 
 #[test]
 fn unknown_usda_name_is_skipped_not_fatal() {
-    // The Python getter prints an unlisted name and carries on; the port keeps
+    // An unlisted name is printed and skipped rather than fatal; the fetcher keeps
     // the same behaviour but records the name for the caller to show.
     let body = r#"{"description":"x","foodNutrients":[
         {"value":1.0,"nutrient":{"name":"Brand New Nutrient","nutrientUnit":{"name":"g"}}},
@@ -167,8 +167,8 @@ fn unknown_usda_name_is_skipped_not_fatal() {
 }
 
 #[test]
-fn python_float_spelling() {
-    // The exponent spelling Python's `repr` uses, which the cache files carry.
+fn float_exponent_spelling() {
+    // The exponent spelling the cache files carry.
     let cases = [
         (4e-5, "4e-05"),
         (5.5e-7, "5.5e-07"),

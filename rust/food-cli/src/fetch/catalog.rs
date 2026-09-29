@@ -1,4 +1,4 @@
-//! Which source each food comes from, ported from `GETTERS` in `src/food.py`.
+//! Which source each food comes from.
 //!
 //! The five inline foods (`BALANCEIT`, `BARF`, `BONE_MEAL`,
 //! `EGG_SHELL_POWDER`, `SALT`) have no remote source; `build.rs` in `food-core`
@@ -12,7 +12,7 @@ pub enum Source {
     Usda(u64),
     /// China Food Composition Tables, by its food id.
     Chinanutri(u64),
-    /// Defined inline in the Python source; nothing to fetch.
+    /// Defined inline in `food-core`'s `build.rs`; nothing to fetch.
     Inline,
 }
 
@@ -26,7 +26,7 @@ pub struct Entry {
     pub cooked_to_raw: bool,
 }
 
-/// Every food the solver knows, in the Python enum's order.
+/// Every food the solver knows, in the canonical order.
 pub const CATALOG: &[Entry] = &[
     Entry {
         name: "BALANCEIT",
