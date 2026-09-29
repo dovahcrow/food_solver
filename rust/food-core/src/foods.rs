@@ -253,10 +253,101 @@ pub static FOODS: LazyLock<HashMap<FoodName, Food>> = LazyLock::new(|| {
                 .find(|(name, tag, _)| *name == food && *tag == source)
                 .map(|(_, _, row)| *row)
                 .expect("every food has a row for its chosen source");
-            (food, row)
+            (food, patch(food, row))
         })
         .collect()
 });
+
+/// A row transform registered in [`PATCH`].
+pub type FoodPatch = fn(Food) -> Food;
+
+/// Fixes applied to a chosen row after it is loaded.
+///
+/// Some sources leave a nutrient out rather than recording a number, and the
+/// report reads that as missing data. A patch replaces the ambiguity for the
+/// fields it covers while keeping the values the source did record, so the
+/// solver's ingredient is unaffected and only the report's completeness
+/// changes.
+pub const PATCH: &[(FoodName, FoodPatch)] = &[(FoodName::SALT, Food::read_missing_as_zero)];
+
+/// Apply the patch registered for `food`, if any.
+fn patch(food: FoodName, row: Food) -> Food {
+    match PATCH.iter().find(|(name, _)| *name == food) {
+        Some((_, apply)) => apply(row),
+        None => row,
+    }
+}
+
+impl Food {
+    /// Read every field the source did not record as a measured `0`.
+    ///
+    /// The fields the source did record keep their values; the rest become
+    /// `Some(0.0)`, so a later report does not flag the food as incomplete.
+    pub fn read_missing_as_zero(self) -> Food {
+        Food {
+            energy: or_zero(self.energy),
+            protein: or_zero(self.protein),
+            fat: or_zero(self.fat),
+            cholesterol: or_zero(self.cholesterol),
+            ash: or_zero(self.ash),
+            carb: or_zero(self.carb),
+            fiber: or_zero(self.fiber),
+            calcium: or_zero(self.calcium),
+            phosphorus: or_zero(self.phosphorus),
+            potassium: or_zero(self.potassium),
+            sodium: or_zero(self.sodium),
+            magnesium: or_zero(self.magnesium),
+            iron: or_zero(self.iron),
+            zinc: or_zero(self.zinc),
+            selenium: or_zero(self.selenium),
+            copper: or_zero(self.copper),
+            manganese: or_zero(self.manganese),
+            iodine: or_zero(self.iodine),
+            chloride: or_zero(self.chloride),
+            vitamin_a: or_zero(self.vitamin_a),
+            vitamin_c: or_zero(self.vitamin_c),
+            vitamin_d: or_zero(self.vitamin_d),
+            vitamin_e: or_zero(self.vitamin_e),
+            vitamin_k: or_zero(self.vitamin_k),
+            vitamin_b1: or_zero(self.vitamin_b1),
+            vitamin_b2: or_zero(self.vitamin_b2),
+            vitamin_b5: or_zero(self.vitamin_b5),
+            vitamin_b6: or_zero(self.vitamin_b6),
+            vitamin_b7: or_zero(self.vitamin_b7),
+            vitamin_b12: or_zero(self.vitamin_b12),
+            niacin: or_zero(self.niacin),
+            pantothenic_acid: or_zero(self.pantothenic_acid),
+            folic_acid: or_zero(self.folic_acid),
+            choline: or_zero(self.choline),
+            carotene: or_zero(self.carotene),
+            arginine: or_zero(self.arginine),
+            histidine: or_zero(self.histidine),
+            isoleucine: or_zero(self.isoleucine),
+            leucine: or_zero(self.leucine),
+            lysine: or_zero(self.lysine),
+            methionine: or_zero(self.methionine),
+            cystine: or_zero(self.cystine),
+            phenylalanine: or_zero(self.phenylalanine),
+            tyrosine: or_zero(self.tyrosine),
+            threonine: or_zero(self.threonine),
+            tryptophan: or_zero(self.tryptophan),
+            valine: or_zero(self.valine),
+            methionine_cystine: or_zero(self.methionine_cystine),
+            phenylalanine_tyrosine: or_zero(self.phenylalanine_tyrosine),
+            linoleic_acid: or_zero(self.linoleic_acid),
+            alpha_linolenic_acid: or_zero(self.alpha_linolenic_acid),
+            arachidonic_acid: or_zero(self.arachidonic_acid),
+            epa: or_zero(self.epa),
+            dha: or_zero(self.dha),
+            epa_dha: or_zero(self.epa_dha),
+        }
+    }
+}
+
+/// `Some(value)` unchanged, `None` read as a measured zero.
+fn or_zero(value: Option<f64>) -> Option<f64> {
+    Some(value.unwrap_or(0.0))
+}
 
 impl FoodName {
     /// The source the solver uses for this food.
