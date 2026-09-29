@@ -19,6 +19,7 @@ class Food(Enum):
     BARF = auto()
     BASA_FISH = auto()
     BEEF = auto()
+    BEEF_LIVER = auto()
     BEEN_SPROUT = auto()
     BELL_PEPER = auto()
     BOCAI = auto()  # Slightly different from spinach, the root of this one is red.
@@ -140,6 +141,7 @@ GETTERS = {
     # Food.BROCCOLI: chinanutri(465),
     Food.BROCCOLI: usda(747447),
     Food.BEEF: usda(2646173),
+    Food.BEEF_LIVER: chinanutri(836),
     Food.BEEN_SPROUT: chinanutri(400),
     Food.BELL_PEPER: usda(2258590),
     Food.BOCAI: chinanutri(473),

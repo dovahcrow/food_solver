@@ -64,6 +64,11 @@ pub const CATALOG: &[Entry] = &[
         cooked_to_raw: false,
     },
     Entry {
+        name: "BEEF_LIVER",
+        source: Source::Chinanutri(836),
+        cooked_to_raw: false,
+    },
+    Entry {
         name: "BEEN_SPROUT",
         source: Source::Chinanutri(400),
         cooked_to_raw: false,
@@ -344,6 +349,7 @@ pub const SR_LEGACY: &[(&str, u64)] = &[
     ("BANANA", 173944),
     ("BASA_FISH", 171952),
     ("BEEF", 171758),
+    ("BEEF_LIVER", 169451),
     ("BEEN_SPROUT", 169957),
     ("BELL_PEPER", 170108),
     ("BOCAI", 168462),
