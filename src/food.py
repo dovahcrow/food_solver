@@ -44,7 +44,7 @@ class Food(Enum):
     JIEGUA = auto()
     JUANXINCAI = auto()
     KONGXINCAI = auto()
-    KUIGUA = auto()
+    CHAYOTE = auto()
     LUOBO = auto()  # O shape, fist size
     OYSTER = auto()
     PORK = auto()
@@ -172,7 +172,7 @@ GETTERS = {
     Food.JIANGDOU: chinanutri(398),
     Food.JIEGUA: chinanutri(423),
     Food.KONGXINCAI: chinanutri(493),
-    Food.KUIGUA: chinanutri(420),
+    Food.CHAYOTE: chinanutri(420),
     Food.LUOBO: chinanutri(371),
     Food.OYSTER: chinanutri(1112),
     Food.PUMPKIN: chinanutri(426),

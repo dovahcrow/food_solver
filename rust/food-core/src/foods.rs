@@ -195,9 +195,9 @@ pub const CHOOSE: &[(FoodName, FoodSource)] = &[
     (FoodName::CARROT, FoodSource::SrLegacy),
     (FoodName::CELERY, FoodSource::SrLegacy),
     (FoodName::CHICKEN_BREAST, FoodSource::SrLegacy),
-    (FoodName::CHICKEN_GIZZARD, FoodSource::Chinanutri),
-    (FoodName::CHICKEN_HEART, FoodSource::Chinanutri),
-    (FoodName::CHICKEN_LIVER, FoodSource::Chinanutri),
+    (FoodName::CHICKEN_GIZZARD, FoodSource::SrLegacy),
+    (FoodName::CHICKEN_HEART, FoodSource::SrLegacy),
+    (FoodName::CHICKEN_LIVER, FoodSource::SrLegacy),
     (FoodName::CHICKEN_THIGH, FoodSource::SrLegacy),
     (FoodName::CHINESE_LETTUS, FoodSource::Chinanutri),
     (FoodName::CUCUMBER, FoodSource::SrLegacy),
@@ -210,15 +210,15 @@ pub const CHOOSE: &[(FoodName, FoodSource)] = &[
     (FoodName::JIEGUA, FoodSource::Chinanutri),
     (FoodName::JUANXINCAI, FoodSource::Chinanutri),
     (FoodName::KONGXINCAI, FoodSource::Chinanutri),
-    (FoodName::KUIGUA, FoodSource::Chinanutri),
+    (FoodName::CHAYOTE, FoodSource::Chinanutri),
     (FoodName::LUOBO, FoodSource::Chinanutri),
     (FoodName::OYSTER, FoodSource::Chinanutri),
     (FoodName::PORK, FoodSource::Chinanutri),
     (FoodName::PORK_FAT, FoodSource::Chinanutri),
-    (FoodName::PORK_HEART, FoodSource::Chinanutri),
-    (FoodName::PORK_INTESTINE, FoodSource::Chinanutri),
-    (FoodName::PORK_LIVER, FoodSource::Chinanutri),
-    (FoodName::PORK_TONGUE, FoodSource::Chinanutri),
+    (FoodName::PORK_HEART, FoodSource::SrLegacy),
+    (FoodName::PORK_INTESTINE, FoodSource::SrLegacy),
+    (FoodName::PORK_LIVER, FoodSource::SrLegacy),
+    (FoodName::PORK_TONGUE, FoodSource::SrLegacy),
     (FoodName::POTATO, FoodSource::SrLegacy),
     (FoodName::PUMPKIN, FoodSource::Chinanutri),
     (FoodName::QINCAI, FoodSource::Chinanutri),
@@ -278,7 +278,6 @@ fn patch(food: FoodName, row: Food) -> Food {
         None => row,
     }
 }
-
 
 impl FoodName {
     /// The source the solver uses for this food.

@@ -178,7 +178,7 @@ pub const CATALOG: &[Entry] = &[
         cooked_to_raw: false,
     },
     Entry {
-        name: "KUIGUA",
+        name: "CHAYOTE",
         source: Source::Chinanutri(420),
         cooked_to_raw: false,
     },
@@ -324,33 +324,68 @@ pub const CATALOG: &[Entry] = &[
     },
 ];
 
-/// SR Legacy records for the foods that the primary sources leave sparse.
+/// SR Legacy records for every food the dataset covers.
 ///
 /// SR Legacy is the same USDA FoodData Central API under a different dataset,
-/// so these sit alongside `Source::Usda` rather than replacing it: the primary
-/// row stays authoritative for the nutrients it has, and the SR Legacy row only
-/// fills the gaps (amino acids, named fatty acids, pantothenic acid, choline,
-/// vitamin K, B12). Picked to match the primary record's food as closely as the
-/// two datasets allow; where they disagree on a shared nutrient they are
-/// genuinely different samples, which is why the merge never overwrites.
+/// so these sit alongside the primary source rather than replacing it: the
+/// chosen row stays authoritative, and the SR Legacy row is the richer panel
+/// (amino acids, named fatty acids, pantothenic acid, choline, vitamin K, B12)
+/// a caller can pick with `FoodName::source`. Picked to match the primary
+/// record's food as closely as the two datasets allow; where they disagree on
+/// a shared nutrient they are genuinely different samples.
 pub const SR_LEGACY: &[(&str, u64)] = &[
+    ("BAICAI", 169979),
     ("BANANA", 173944),
+    ("BASA_FISH", 171952),
     ("BEEF", 171758),
+    ("BEEN_SPROUT", 169957),
     ("BELL_PEPER", 170108),
+    ("BOCAI", 168462),
     ("BOKCHOY", 170390),
     ("BROCCOLI", 170379),
     ("CABBAGE", 169975),
+    ("CANOLA_OIL", 172336),
     ("CARROT", 170393),
     ("CELERY", 169988),
+    ("CHAYOTE", 170402),
     ("CHICKEN_BREAST", 171140),
+    ("CHICKEN_GIZZARD", 171456),
+    ("CHICKEN_HEART", 171458),
+    ("CHICKEN_LIVER", 171060),
     ("CHICKEN_THIGH", 172385),
+    ("CHINESE_LETTUS", 169247),
     ("CUCUMBER", 168409),
     ("EGG", 171287),
     ("EGGPLANT", 169228),
+    ("FUGUA", 169232),
+    ("JIANGDOU", 169222),
+    ("JUANXINCAI", 169975),
+    ("KONGXINCAI", 169301),
+    ("LUOBO", 168451),
+    ("OYSTER", 174219),
+    ("PORK", 168230),
+    ("PORK_FAT", 167813),
+    ("PORK_HEART", 168267),
+    ("PORK_INTESTINE", 168266),
+    ("PORK_LIVER", 167862),
+    ("PORK_TONGUE", 168275),
     ("POTATO", 170026),
+    ("PUMPKIN", 168448),
+    ("QINCAI", 169988),
     ("RICE", 169756),
+    ("SHANYAO", 170071),
+    ("SHITAKE", 169242),
+    ("SIGUA", 168414),
+    ("SIJIDOU", 169961),
+    ("SOYBEAN_GREEN", 169282),
     ("SOY_MILK", 172446),
     ("SWEET_POTATO", 168482),
+    ("TOFU_FIRM", 172475),
+    ("TOFU_SOFT", 172449),
+    ("TOMATO", 170457),
+    ("WHITE_MUSHROOM", 169251),
+    ("WINTER_MELON", 170069),
+    ("ZIGANLAN", 169975),
     ("ZUCCHINI", 169291),
 ];
 
